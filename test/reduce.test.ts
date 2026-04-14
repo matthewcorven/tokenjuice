@@ -175,4 +175,106 @@ describe("reduceExecution", () => {
     expect(result.inlineText).toBe("ok: 93 rules validated, 93 fixtures verified");
     expect(result.stats.reducedChars).toBeLessThan(result.stats.rawChars);
   });
+
+  it("compresses noisy docker build output aggressively", async () => {
+    const progress = Array.from(
+      { length: 80 },
+      (_, index) => `#7 ${index + 1}.23 downloading layer ${index + 1}/80`,
+    ).join("\n");
+    const result = await reduceExecution({
+      toolName: "exec",
+      command: "docker build .",
+      argv: ["docker", "build", "."],
+      combinedText: [
+        "#1 [internal] load build definition from Dockerfile",
+        "#1 DONE 0.0s",
+        "#2 [2/5] RUN pnpm install",
+        progress,
+        "#2 DONE 18.2s",
+        "#3 [3/5] RUN pnpm build",
+        "#3 ERROR: process \"/bin/sh -c pnpm build\" did not complete successfully",
+      ].join("\n"),
+      exitCode: 1,
+    });
+
+    expect(result.classification.matchedReducer).toBe("devops/docker-build");
+    expect(result.inlineText).toContain("#3 ERROR");
+    expect(result.stats.ratio).toBeLessThan(0.5);
+  });
+
+  it("compresses noisy kubectl logs around warning and error lines", async () => {
+    const info = Array.from(
+      { length: 120 },
+      (_, index) => `2026-04-14T12:00:${String(index).padStart(2, "0")}Z info request ${index} ok`,
+    ).join("\n");
+    const result = await reduceExecution({
+      toolName: "exec",
+      command: "kubectl logs api-123",
+      argv: ["kubectl", "logs", "api-123"],
+      combinedText: [
+        info,
+        "2026-04-14T12:02:00Z warn database latency above threshold",
+        "2026-04-14T12:02:01Z error timeout talking to redis",
+      ].join("\n"),
+      exitCode: 0,
+    });
+
+    expect(result.classification.matchedReducer).toBe("devops/kubectl-logs");
+    expect(result.inlineText).toContain("warn database latency above threshold");
+    expect(result.inlineText).toContain("error timeout talking to redis");
+    expect(result.stats.ratio).toBeLessThan(0.2);
+  });
+
+  it("compresses noisy vitest stack traces while keeping failure summary", async () => {
+    const stack = Array.from(
+      { length: 90 },
+      (_, index) => `    at someDeepFrame${index} (/repo/node_modules/pkg/file${index}.js:${index + 1}:1)`,
+    ).join("\n");
+    const result = await reduceExecution({
+      toolName: "exec",
+      command: "pnpm vitest",
+      argv: ["pnpm", "vitest"],
+      combinedText: [
+        "RUN  v3.2.4 /repo",
+        " ❯ test/example.test.ts (2 tests | 1 failed)",
+        "AssertionError: expected 1 to be 2",
+        stack,
+        " Test Files  1 failed (1)",
+        "      Tests  1 failed | 1 passed (2)",
+      ].join("\n"),
+      exitCode: 1,
+    });
+
+    expect(result.classification.matchedReducer).toBe("tests/vitest");
+    expect(result.inlineText).toContain("AssertionError: expected 1 to be 2");
+    expect(result.inlineText).toContain("Test Files  1 failed (1)");
+    expect(result.stats.ratio).toBeLessThan(0.25);
+  });
+
+  it("compresses noisy pytest output while keeping failure summary", async () => {
+    const passed = Array.from(
+      { length: 120 },
+      (_, index) => `test_api.py::test_case_${index} PASSED`,
+    ).join("\n");
+    const result = await reduceExecution({
+      toolName: "exec",
+      command: "pytest",
+      argv: ["pytest"],
+      combinedText: [
+        "platform darwin -- Python 3.12.0, pytest-8.3.0",
+        "rootdir: /repo",
+        passed,
+        "__________________________ test_save __________________________",
+        "test_api.py::test_save FAILED",
+        "E   AssertionError: expected 201 == 200",
+        "================ 1 failed, 120 passed in 1.20s ================",
+      ].join("\n"),
+      exitCode: 1,
+    });
+
+    expect(result.classification.matchedReducer).toBe("tests/pytest");
+    expect(result.inlineText).toContain("test_api.py::test_save FAILED");
+    expect(result.inlineText).toContain("1 failed, 120 passed");
+    expect(result.stats.ratio).toBeLessThan(0.2);
+  });
 });

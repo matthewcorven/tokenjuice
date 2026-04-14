@@ -12,19 +12,36 @@
     "dedupeAdjacent": true,
     "trimEmptyEdges": true
   },
+  "filters": {
+    "skipPatterns": [
+      "^#\\d+\\s+[0-9.]+\\s",
+      "^#\\d+\\s+extracting\\s",
+      "^#\\d+\\s+sha256:"
+    ],
+    "keepPatterns": [
+      "^#\\d+\\s+\\[",
+      "^#\\d+\\s+DONE\\s",
+      "^#\\d+\\s+ERROR:",
+      "^ERROR:",
+      "^ => ",
+      "^exporting to image$",
+      "^writing image",
+      "^naming to "
+    ]
+  },
   "summarize": {
-    "head": 12,
-    "tail": 10
+    "head": 10,
+    "tail": 8
   },
   "failure": {
     "preserveOnFailure": true,
-    "head": 18,
-    "tail": 16
+    "head": 14,
+    "tail": 14
   },
   "counters": [
     {
       "name": "step",
-      "pattern": "^#\\d+",
+      "pattern": "^#\\d+\\s+\\[",
       "flags": "m"
     },
     {

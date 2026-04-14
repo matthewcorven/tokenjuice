@@ -14,17 +14,31 @@
   "filters": {
     "skipPatterns": [
       "^\\s*at .+",
-      "^\\s*❯ .+node_modules.+"
+      "^\\s*❯ .+node_modules.+",
+      "^\\s*✓ .+"
+    ],
+    "keepPatterns": [
+      "^\\s*RUN\\s+",
+      "^\\s*❯\\s+.+",
+      "^\\s*FAIL\\s+.+",
+      "^AssertionError: .+",
+      "^Error: .+",
+      "^Caused by: .+",
+      "^\\s*Test Files\\s+.+",
+      "^\\s*Tests\\s+.+",
+      "^   Start at\\s+.+",
+      "^   Duration\\s+.+",
+      "^⎯⎯⎯.+"
     ]
   },
   "summarize": {
-    "head": 12,
+    "head": 10,
     "tail": 10
   },
   "failure": {
     "preserveOnFailure": true,
-    "head": 18,
-    "tail": 18
+    "head": 14,
+    "tail": 14
   },
   "counters": [
     {
@@ -33,7 +47,7 @@
       "flags": "m"
     },
     {
-      "name": "failed",
+      "name": "failure",
       "pattern": "failed",
       "flags": "i"
     }

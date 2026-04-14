@@ -15,17 +15,29 @@
     "skipPatterns": [
       "^platform .+",
       "^rootdir: .+",
-      "^plugins: .+"
+      "^plugins: .+",
+      "^collected \\d+ items$",
+      "^test.+ PASSED$"
+    ],
+    "keepPatterns": [
+      "^=+.+(failed|passed|error).+=+$",
+      "^_{2,}.+_{2,}$",
+      "^FAILED .+",
+      "^ERROR .+",
+      "^E\\s+.+",
+      "AssertionError",
+      "^.+::.+ (FAILED|ERROR)$",
+      "^>\\s+.+"
     ]
   },
   "summarize": {
-    "head": 12,
+    "head": 10,
     "tail": 10
   },
   "failure": {
     "preserveOnFailure": true,
-    "head": 18,
-    "tail": 18
+    "head": 14,
+    "tail": 14
   },
   "counters": [
     {
