@@ -5,6 +5,7 @@ import { stdin as inputStdin } from "node:process";
 
 import { getArtifact, listArtifacts } from "../core/artifacts.js";
 import { reduceExecution } from "../core/reduce.js";
+import { verifyBuiltinRules } from "../core/rules.js";
 import { runWrappedCommand } from "../core/wrap.js";
 
 type Format = "text" | "json";
@@ -29,6 +30,7 @@ function printUsage(): void {
       "  tokenjuice wrap -- <command> [args...] [--tee] [--store]",
       "  tokenjuice ls",
       "  tokenjuice cat <artifact-id>",
+      "  tokenjuice verify",
     ].join("\n"),
   );
   process.stderr.write("\n");
@@ -201,6 +203,29 @@ async function runCat(args: ParsedArgs): Promise<number> {
   return 0;
 }
 
+async function runVerify(args: ParsedArgs): Promise<number> {
+  const results = await verifyBuiltinRules();
+  const failed = results.filter((result) => !result.ok);
+
+  if (args.format === "json") {
+    process.stdout.write(`${JSON.stringify(results, null, 2)}\n`);
+    return failed.length === 0 ? 0 : 1;
+  }
+
+  if (failed.length === 0) {
+    process.stdout.write(`ok: ${results.length} rules validated\n`);
+    return 0;
+  }
+
+  for (const result of failed) {
+    process.stderr.write(`${result.id}\n`);
+    for (const error of result.errors) {
+      process.stderr.write(`- ${error}\n`);
+    }
+  }
+  return 1;
+}
+
 async function main(): Promise<number> {
   const args = parseArgs(process.argv.slice(2));
   switch (args.command) {
@@ -212,6 +237,8 @@ async function main(): Promise<number> {
       return await runList(args);
     case "cat":
       return await runCat(args);
+    case "verify":
+      return await runVerify(args);
     default:
       printUsage();
       return 1;
