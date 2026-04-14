@@ -30,8 +30,13 @@ describe("rules", () => {
       "build/webpack",
       "filesystem/find",
       "filesystem/ls",
+      "git/branch",
       "git/diff-name-only",
       "git/diff-stat",
+      "git/log-oneline",
+      "git/remote-v",
+      "git/show",
+      "git/stash-list",
       "git/status",
       "install/bun-install",
       "install/npm-install",
@@ -66,7 +71,7 @@ describe("rules", () => {
 
   it("loads builtin fixtures successfully", async () => {
     const fixtures = await loadBuiltinFixtures();
-    expect(fixtures).toHaveLength(33);
+    expect(fixtures).toHaveLength(38);
   });
 
   it("verifies builtin fixtures cleanly", async () => {

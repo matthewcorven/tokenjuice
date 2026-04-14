@@ -1,0 +1,34 @@
+{
+  "id": "git/show",
+  "family": "git-show",
+  "description": "Compact git show output while preserving commit summary and diff stat.",
+  "match": {
+    "argv0": ["git"],
+    "argvIncludes": [["show"]]
+  },
+  "transforms": {
+    "stripAnsi": true,
+    "dedupeAdjacent": true,
+    "trimEmptyEdges": true
+  },
+  "summarize": {
+    "head": 14,
+    "tail": 10
+  },
+  "failure": {
+    "preserveOnFailure": true,
+    "head": 18,
+    "tail": 16
+  },
+  "counters": [
+    {
+      "name": "file",
+      "pattern": "\\|"
+    },
+    {
+      "name": "commit",
+      "pattern": "^commit\\s",
+      "flags": "m"
+    }
+  ]
+}

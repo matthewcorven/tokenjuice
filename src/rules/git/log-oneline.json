@@ -1,0 +1,30 @@
+{
+  "id": "git/log-oneline",
+  "family": "git-history",
+  "description": "Compact git log --oneline output while preserving commits.",
+  "match": {
+    "argv0": ["git"],
+    "argvIncludes": [["log"], ["--oneline"]]
+  },
+  "transforms": {
+    "stripAnsi": true,
+    "dedupeAdjacent": true,
+    "trimEmptyEdges": true
+  },
+  "summarize": {
+    "head": 12,
+    "tail": 4
+  },
+  "failure": {
+    "preserveOnFailure": true,
+    "head": 14,
+    "tail": 12
+  },
+  "counters": [
+    {
+      "name": "commit",
+      "pattern": "^[a-f0-9]{7,}\\s",
+      "flags": "m"
+    }
+  ]
+}
