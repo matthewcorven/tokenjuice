@@ -1,0 +1,15 @@
+{
+  "id": "build-webpack-basic",
+  "ruleId": "build/webpack",
+  "input": {
+    "toolName": "exec",
+    "command": "pnpm webpack",
+    "combinedText": "ERROR in ./src/index.ts\nModule not found: Error: Can't resolve 'left-pad'\nwebpack 5.0.0 compiled with 1 error\n",
+    "exitCode": 1
+  },
+  "expect": {
+    "matchedReducer": "build/webpack",
+    "family": "build-bundler",
+    "contains": ["error", "Can't resolve"]
+  }
+}

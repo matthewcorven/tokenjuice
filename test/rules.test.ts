@@ -25,21 +25,36 @@ describe("rules", () => {
     expect(rules.map((rule) => rule.rule.id)).toEqual([
       "build/esbuild",
       "build/tsc",
+      "build/tsdown",
+      "build/vite",
+      "build/webpack",
       "filesystem/find",
       "filesystem/ls",
       "git/diff-name-only",
       "git/diff-stat",
       "git/status",
+      "install/bun-install",
+      "install/npm-install",
+      "install/pnpm-install",
+      "install/yarn-install",
+      "lint/biome",
       "lint/eslint",
       "lint/oxlint",
+      "lint/prettier-check",
+      "search/git-grep",
       "search/grep",
       "search/rg",
+      "tests/bun-test",
       "tests/cargo-test",
       "tests/go-test",
       "tests/jest",
+      "tests/mocha",
+      "tests/npm-test",
+      "tests/playwright",
       "tests/pnpm-test",
       "tests/pytest",
       "tests/vitest",
+      "tests/yarn-test",
       "generic/fallback",
     ]);
   });
@@ -51,7 +66,7 @@ describe("rules", () => {
 
   it("loads builtin fixtures successfully", async () => {
     const fixtures = await loadBuiltinFixtures();
-    expect(fixtures).toHaveLength(18);
+    expect(fixtures).toHaveLength(33);
   });
 
   it("verifies builtin fixtures cleanly", async () => {
