@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { discoverCandidates, doctorArtifacts, listArtifactMetadata, reduceExecution } from "../src/index.js";
+import { buildAnalysisEntry, discoverCandidates, doctorArtifacts, listArtifactMetadata, reduceExecution } from "../src/index.js";
 
 const tempDirs: string[] = [];
 
@@ -63,7 +63,30 @@ describe("analysis", () => {
 
     const metadata = await listArtifactMetadata(storeDir);
     const report = doctorArtifacts(metadata);
-    expect(report.totals.artifacts).toBe(1);
+    expect(report.totals.entries).toBe(1);
+    expect(report.health).toBe("poor");
     expect(report.topWeakReducers[0]?.matchedReducer).toBe("search/grep");
+  });
+
+  it("builds analysis entries from a direct reduction result", async () => {
+    const result = await reduceExecution({
+      toolName: "exec",
+      command: "pnpm vitest",
+      argv: ["pnpm", "vitest"],
+      combinedText: "RUN  v3.2.4\nFAIL test/example.test.ts\n",
+      exitCode: 1,
+    });
+
+    const entry = buildAnalysisEntry(
+      {
+        toolName: "exec",
+        command: "pnpm vitest",
+        exitCode: 1,
+      },
+      result,
+    );
+
+    expect(entry.metadata.classification.matchedReducer).toBe("tests/vitest");
+    expect(entry.metadata.rawChars).toBeGreaterThan(0);
   });
 });

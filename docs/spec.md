@@ -98,6 +98,7 @@ inspect stored artifacts and surface likely next reducer work:
 
 ```bash
 tokenjuice discover
+tokenjuice discover build.log --source-command "pnpm tsc --noEmit" --exit-code 2
 ```
 
 ### doctor
@@ -106,6 +107,7 @@ summarize reducer health and savings:
 
 ```bash
 tokenjuice doctor
+cat build.log | tokenjuice doctor --source-command "pnpm eslint src" --exit-code 1
 ```
 
 ## rule model

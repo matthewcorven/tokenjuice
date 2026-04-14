@@ -1,4 +1,8 @@
-import type { ArtifactMetadataRef } from "../types.js";
+import type { CompactResult, StoredArtifactMetadata, ToolExecutionInput } from "../types.js";
+
+export type AnalysisEntry = {
+  metadata: StoredArtifactMetadata;
+};
 
 export type DiscoverCandidate = {
   kind: "missing-rule" | "weak-rule";
@@ -12,11 +16,13 @@ export type DiscoverCandidate = {
 
 export type DoctorReport = {
   totals: {
-    artifacts: number;
+    entries: number;
     genericArtifacts: number;
     weakArtifacts: number;
     avgRatio: number | null;
   };
+  health: "good" | "warn" | "poor";
+  alerts: string[];
   topMissingCommands: DiscoverCandidate[];
   topWeakReducers: DiscoverCandidate[];
   topReducers: Array<{
@@ -39,6 +45,9 @@ type GroupState = {
 const GENERIC_REDUCERS = new Set(["generic/fallback", undefined]);
 const WRAPPER_COMMANDS = new Set(["pnpm", "npm", "yarn", "bun", "npx"]);
 const SECONDARY_COMMANDS = new Set(["git", "cargo", "go", "python", "node"]);
+const WEAK_RATIO_THRESHOLD = 0.65;
+const MISSING_RAW_CHARS_THRESHOLD = 200;
+const WEAK_RAW_CHARS_THRESHOLD = 500;
 
 function tokenize(command: string): string[] {
   return command.trim().split(/\s+/u).filter(Boolean);
@@ -72,7 +81,22 @@ export function normalizeCommandSignature(command?: string): string | null {
   return first ?? null;
 }
 
-function groupCandidates(entries: Array<ArtifactMetadataRef & { kind: DiscoverCandidate["kind"] }>): DiscoverCandidate[] {
+export function buildAnalysisEntry(input: ToolExecutionInput, result: CompactResult): AnalysisEntry {
+  return {
+    metadata: {
+      createdAt: new Date().toISOString(),
+      classification: result.classification,
+      rawChars: result.stats.rawChars,
+      reducedChars: result.stats.reducedChars,
+      ratio: result.stats.ratio,
+      ...(input.toolName ? { toolName: input.toolName } : {}),
+      ...(input.command ? { command: input.command } : {}),
+      ...(typeof input.exitCode === "number" ? { exitCode: input.exitCode } : {}),
+    },
+  };
+}
+
+function groupCandidates(entries: Array<AnalysisEntry & { kind: DiscoverCandidate["kind"] }>): DiscoverCandidate[] {
   const groups = new Map<string, GroupState>();
 
   for (const entry of entries) {
@@ -122,19 +146,19 @@ function groupCandidates(entries: Array<ArtifactMetadataRef & { kind: DiscoverCa
     });
 }
 
-export function discoverCandidates(metadata: ArtifactMetadataRef[]): DiscoverCandidate[] {
-  const missing = metadata
+export function discoverCandidates(entries: AnalysisEntry[]): DiscoverCandidate[] {
+  const missing = entries
     .filter((entry) => GENERIC_REDUCERS.has(entry.metadata.classification.matchedReducer))
-    .filter((entry) => entry.metadata.rawChars >= 200)
+    .filter((entry) => entry.metadata.rawChars >= MISSING_RAW_CHARS_THRESHOLD)
     .map((entry) => ({
       ...entry,
       kind: "missing-rule" as const,
     }));
 
-  const weak = metadata
+  const weak = entries
     .filter((entry) => !GENERIC_REDUCERS.has(entry.metadata.classification.matchedReducer))
-    .filter((entry) => typeof entry.metadata.ratio === "number" && entry.metadata.ratio >= 0.65)
-    .filter((entry) => entry.metadata.rawChars >= 500)
+    .filter((entry) => typeof entry.metadata.ratio === "number" && entry.metadata.ratio >= WEAK_RATIO_THRESHOLD)
+    .filter((entry) => entry.metadata.rawChars >= WEAK_RAW_CHARS_THRESHOLD)
     .map((entry) => ({
       ...entry,
       kind: "weak-rule" as const,
@@ -155,25 +179,68 @@ export function discoverCandidates(metadata: ArtifactMetadataRef[]): DiscoverCan
   });
 }
 
-export function doctorArtifacts(metadata: ArtifactMetadataRef[]): DoctorReport {
-  const ratios = metadata
+function buildDoctorAlerts(
+  entries: AnalysisEntry[],
+  avgRatio: number | null,
+  genericCount: number,
+  weakCount: number,
+): { health: DoctorReport["health"]; alerts: string[] } {
+  const alerts: string[] = [];
+
+  if (entries.length === 0) {
+    return {
+      health: "warn",
+      alerts: ["no entries available yet; run with --store or analyze a file/stdin log"],
+    };
+  }
+
+  if (genericCount > 0) {
+    alerts.push(`${genericCount} entry${genericCount === 1 ? "" : "ies"} fell back to generic/fallback`);
+  }
+  if (weakCount > 0) {
+    alerts.push(`${weakCount} entry${weakCount === 1 ? "" : "ies"} matched a reducer but still compressed weakly`);
+  }
+  if (avgRatio !== null && avgRatio >= 0.85) {
+    alerts.push(`average reduction ratio is weak at ${Math.round(avgRatio * 100)}%`);
+  }
+
+  if (alerts.length === 0) {
+    return {
+      health: "good",
+      alerts: [],
+    };
+  }
+
+  const health: DoctorReport["health"] = avgRatio !== null && avgRatio >= 0.85 ? "poor" : "warn";
+  return { health, alerts };
+}
+
+export function doctorArtifacts(entries: AnalysisEntry[]): DoctorReport {
+  const ratios = entries
     .map((entry) => entry.metadata.ratio)
     .filter((ratio): ratio is number => typeof ratio === "number");
-  const discover = discoverCandidates(metadata);
+  const discover = discoverCandidates(entries);
 
   const reducerCounts = new Map<string, number>();
-  for (const entry of metadata) {
+  for (const entry of entries) {
     const reducer = entry.metadata.classification.matchedReducer ?? "generic/fallback";
     reducerCounts.set(reducer, (reducerCounts.get(reducer) ?? 0) + 1);
   }
 
+  const genericCount = entries.filter((entry) => GENERIC_REDUCERS.has(entry.metadata.classification.matchedReducer)).length;
+  const weakCount = discover.filter((candidate) => candidate.kind === "weak-rule").reduce((sum, candidate) => sum + candidate.count, 0);
+  const avgRatio = ratios.length > 0 ? ratios.reduce((sum, ratio) => sum + ratio, 0) / ratios.length : null;
+  const alerts = buildDoctorAlerts(entries, avgRatio, genericCount, weakCount);
+
   return {
     totals: {
-      artifacts: metadata.length,
-      genericArtifacts: metadata.filter((entry) => GENERIC_REDUCERS.has(entry.metadata.classification.matchedReducer)).length,
-      weakArtifacts: discover.filter((candidate) => candidate.kind === "weak-rule").reduce((sum, candidate) => sum + candidate.count, 0),
-      avgRatio: ratios.length > 0 ? ratios.reduce((sum, ratio) => sum + ratio, 0) / ratios.length : null,
+      entries: entries.length,
+      genericArtifacts: genericCount,
+      weakArtifacts: weakCount,
+      avgRatio,
     },
+    health: alerts.health,
+    alerts: alerts.alerts,
     topMissingCommands: discover.filter((candidate) => candidate.kind === "missing-rule").slice(0, 10),
     topWeakReducers: discover.filter((candidate) => candidate.kind === "weak-rule").slice(0, 10),
     topReducers: [...reducerCounts.entries()]

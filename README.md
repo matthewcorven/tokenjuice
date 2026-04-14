@@ -42,6 +42,13 @@ run `tokenjuice verify` to validate the loaded rules.
 
 use `tokenjuice discover` to find missing or weak reducer candidates from stored artifacts.
 
+you can also analyze a raw log directly:
+
+```bash
+tokenjuice discover build.log --source-command "pnpm tsc --noEmit" --exit-code 2
+cat build.log | tokenjuice doctor --source-command "pnpm eslint src" --exit-code 1
+```
+
 use `tokenjuice doctor` to inspect coverage, generic fallbacks, weak reducers, and savings ratios.
 
 ## docs

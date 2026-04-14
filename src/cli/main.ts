@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { stdin as inputStdin } from "node:process";
 
 import { getArtifact, listArtifactMetadata, listArtifacts } from "../core/artifacts.js";
-import { discoverCandidates, doctorArtifacts } from "../core/analysis.js";
+import { buildAnalysisEntry, discoverCandidates, doctorArtifacts } from "../core/analysis.js";
 import { reduceExecution } from "../core/reduce.js";
 import { verifyRules } from "../core/rules.js";
 import { runWrappedCommand } from "../core/wrap.js";
@@ -15,6 +15,9 @@ type ParsedArgs = {
   command: string | undefined;
   format: Format;
   classifier: string | undefined;
+  sourceCommand: string | undefined;
+  toolName: string | undefined;
+  exitCode: number | undefined;
   store: boolean;
   tee: boolean;
   storeDir: string | undefined;
@@ -32,8 +35,8 @@ function printUsage(): void {
       "  tokenjuice ls",
       "  tokenjuice cat <artifact-id>",
       "  tokenjuice verify",
-      "  tokenjuice discover",
-      "  tokenjuice doctor",
+      "  tokenjuice discover [file] [--source-command <cmd>] [--tool-name <name>] [--exit-code <n>]",
+      "  tokenjuice doctor [file] [--source-command <cmd>] [--tool-name <name>] [--exit-code <n>]",
     ].join("\n"),
   );
   process.stderr.write("\n");
@@ -45,6 +48,9 @@ function parseArgs(argv: string[]): ParsedArgs {
   const passthrough: string[] = [];
   let format: Format = "text";
   let classifier: string | undefined;
+  let sourceCommand: string | undefined;
+  let toolName: string | undefined;
+  let exitCode: number | undefined;
   let store = false;
   let tee = false;
   let storeDir: string | undefined;
@@ -80,6 +86,27 @@ function parseArgs(argv: string[]): ParsedArgs {
         classifier = next;
         index += 2;
         break;
+      case "--source-command":
+        if (!next) {
+          throw new Error("--source-command requires a value");
+        }
+        sourceCommand = next;
+        index += 2;
+        break;
+      case "--tool-name":
+        if (!next) {
+          throw new Error("--tool-name requires a value");
+        }
+        toolName = next;
+        index += 2;
+        break;
+      case "--exit-code":
+        if (!next || Number.isNaN(Number(next))) {
+          throw new Error("--exit-code requires a number");
+        }
+        exitCode = Number(next);
+        index += 2;
+        break;
       case "--store":
         store = true;
         index += 1;
@@ -111,6 +138,9 @@ function parseArgs(argv: string[]): ParsedArgs {
     command,
     format,
     classifier,
+    sourceCommand,
+    toolName,
+    exitCode,
     store,
     tee,
     storeDir,
@@ -229,6 +259,32 @@ async function runVerify(args: ParsedArgs): Promise<number> {
   return 1;
 }
 
+async function loadDirectAnalysisEntry(args: ParsedArgs) {
+  const file = args.positionals[0];
+  const hasPipedInput = !inputStdin.isTTY;
+  if (!file && !hasPipedInput) {
+    return null;
+  }
+
+  const rawText = file ? await readFile(file, "utf8") : await readStdin();
+  const input = {
+    toolName: args.toolName ?? "exec",
+    command: args.sourceCommand ?? (file ? `analyze:${file}` : "stdin"),
+    combinedText: rawText,
+    exitCode: args.exitCode ?? 0,
+  } as const;
+  const result = await reduceExecution(input, {
+    ...(args.classifier ? { classifier: args.classifier } : {}),
+    ...(typeof args.maxInlineChars === "number" ? { maxInlineChars: args.maxInlineChars } : {}),
+  });
+
+  return {
+    input,
+    result,
+    entry: buildAnalysisEntry(input, result),
+  };
+}
+
 function formatRatio(ratio: number | null): string {
   if (ratio === null) {
     return "n/a";
@@ -237,12 +293,18 @@ function formatRatio(ratio: number | null): string {
 }
 
 async function runDiscover(args: ParsedArgs): Promise<number> {
-  const metadata = await listArtifactMetadata(args.storeDir);
-  const candidates = discoverCandidates(metadata);
+  const direct = await loadDirectAnalysisEntry(args);
+  const entries = direct ? [direct.entry] : await listArtifactMetadata(args.storeDir);
+  const candidates = discoverCandidates(entries);
 
   if (args.format === "json") {
-    process.stdout.write(`${JSON.stringify(candidates, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify(direct ? { result: direct.result, candidates } : candidates, null, 2)}\n`);
     return 0;
+  }
+
+  if (direct) {
+    process.stdout.write(`classification: ${direct.result.classification.matchedReducer ?? "generic/fallback"}\n`);
+    process.stdout.write(`ratio: ${formatRatio(direct.result.stats.ratio)}\n`);
   }
 
   if (candidates.length === 0) {
@@ -268,18 +330,29 @@ async function runDiscover(args: ParsedArgs): Promise<number> {
 }
 
 async function runDoctor(args: ParsedArgs): Promise<number> {
-  const metadata = await listArtifactMetadata(args.storeDir);
-  const report = doctorArtifacts(metadata);
+  const direct = await loadDirectAnalysisEntry(args);
+  const entries = direct ? [direct.entry] : await listArtifactMetadata(args.storeDir);
+  const report = doctorArtifacts(entries);
 
   if (args.format === "json") {
-    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify(direct ? { result: direct.result, report } : report, null, 2)}\n`);
     return 0;
   }
 
-  process.stdout.write(`artifacts: ${report.totals.artifacts}\n`);
+  if (direct) {
+    process.stdout.write(`classification: ${direct.result.classification.matchedReducer ?? "generic/fallback"}\n`);
+  }
+  process.stdout.write(`entries: ${report.totals.entries}\n`);
   process.stdout.write(`generic artifacts: ${report.totals.genericArtifacts}\n`);
   process.stdout.write(`weak artifacts: ${report.totals.weakArtifacts}\n`);
   process.stdout.write(`avg ratio: ${formatRatio(report.totals.avgRatio)}\n`);
+  process.stdout.write(`health: ${report.health}\n`);
+  if (report.alerts.length > 0) {
+    process.stdout.write("alerts:\n");
+    for (const alert of report.alerts) {
+      process.stdout.write(`- ${alert}\n`);
+    }
+  }
 
   if (report.topMissingCommands.length > 0) {
     process.stdout.write("missing-rule candidates:\n");
