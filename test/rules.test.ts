@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { clearRuleCache, loadBuiltinRules, loadRules, verifyBuiltinRules, verifyRules } from "../src/index.js";
+import { clearRuleCache, loadBuiltinFixtures, loadBuiltinRules, loadRules, verifyBuiltinFixtures, verifyBuiltinRules, verifyRules } from "../src/index.js";
 
 const tempDirs: string[] = [];
 
@@ -46,6 +46,16 @@ describe("rules", () => {
 
   it("verifies builtin rules cleanly", async () => {
     const results = await verifyBuiltinRules();
+    expect(results.every((result) => result.ok)).toBe(true);
+  });
+
+  it("loads builtin fixtures successfully", async () => {
+    const fixtures = await loadBuiltinFixtures();
+    expect(fixtures).toHaveLength(18);
+  });
+
+  it("verifies builtin fixtures cleanly", async () => {
+    const results = await verifyBuiltinFixtures();
     expect(results.every((result) => result.ok)).toBe(true);
   });
 

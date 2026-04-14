@@ -5,6 +5,7 @@ import { stdin as inputStdin } from "node:process";
 
 import { getArtifact, listArtifactMetadata, listArtifacts } from "../core/artifacts.js";
 import { buildAnalysisEntry, discoverCandidates, doctorArtifacts, statsArtifacts } from "../core/analysis.js";
+import { verifyBuiltinFixtures } from "../core/fixtures.js";
 import { reduceExecution } from "../core/reduce.js";
 import { verifyRules } from "../core/rules.js";
 import { runWrappedCommand } from "../core/wrap.js";
@@ -15,6 +16,7 @@ type ParsedArgs = {
   command: string | undefined;
   format: Format;
   classifier: string | undefined;
+  fixtures: boolean;
   sourceCommand: string | undefined;
   toolName: string | undefined;
   exitCode: number | undefined;
@@ -34,7 +36,7 @@ function printUsage(): void {
       "  tokenjuice wrap -- <command> [args...] [--tee] [--store]",
       "  tokenjuice ls",
       "  tokenjuice cat <artifact-id>",
-      "  tokenjuice verify",
+      "  tokenjuice verify [--fixtures]",
       "  tokenjuice discover [file] [--source-command <cmd>] [--tool-name <name>] [--exit-code <n>]",
       "  tokenjuice doctor [file] [--source-command <cmd>] [--tool-name <name>] [--exit-code <n>]",
       "  tokenjuice stats",
@@ -49,6 +51,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   const passthrough: string[] = [];
   let format: Format = "text";
   let classifier: string | undefined;
+  let fixtures = false;
   let sourceCommand: string | undefined;
   let toolName: string | undefined;
   let exitCode: number | undefined;
@@ -86,6 +89,10 @@ function parseArgs(argv: string[]): ParsedArgs {
         }
         classifier = next;
         index += 2;
+        break;
+      case "--fixtures":
+        fixtures = true;
+        index += 1;
         break;
       case "--source-command":
         if (!next) {
@@ -139,6 +146,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     command,
     format,
     classifier,
+    fixtures,
     sourceCommand,
     toolName,
     exitCode,
@@ -240,19 +248,31 @@ async function runCat(args: ParsedArgs): Promise<number> {
 async function runVerify(args: ParsedArgs): Promise<number> {
   const results = await verifyRules();
   const failed = results.filter((result) => !result.ok);
+  const fixtureResults = args.fixtures ? await verifyBuiltinFixtures() : [];
+  const failedFixtures = fixtureResults.filter((result) => !result.ok);
 
   if (args.format === "json") {
-    process.stdout.write(`${JSON.stringify(results, null, 2)}\n`);
-    return failed.length === 0 ? 0 : 1;
+    process.stdout.write(
+      `${JSON.stringify(args.fixtures ? { rules: results, fixtures: fixtureResults } : results, null, 2)}\n`,
+    );
+    return failed.length === 0 && failedFixtures.length === 0 ? 0 : 1;
   }
 
-  if (failed.length === 0) {
-    process.stdout.write(`ok: ${results.length} rules validated\n`);
+  if (failed.length === 0 && failedFixtures.length === 0) {
+    process.stdout.write(
+      `ok: ${results.length} rules validated${args.fixtures ? `, ${fixtureResults.length} fixtures verified` : ""}\n`,
+    );
     return 0;
   }
 
   for (const result of failed) {
     process.stderr.write(`${result.source}:${result.id}\n`);
+    for (const error of result.errors) {
+      process.stderr.write(`- ${error}\n`);
+    }
+  }
+  for (const result of failedFixtures) {
+    process.stderr.write(`fixture:${result.ruleId}:${result.id}\n`);
     for (const error of result.errors) {
       process.stderr.write(`- ${error}\n`);
     }

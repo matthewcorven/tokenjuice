@@ -148,6 +148,18 @@ export type ReduceOptions = {
 
 export type ReduceExecutionResult = CompactResult;
 
+export type RuleFixture = {
+  id: string;
+  ruleId: string;
+  input: ToolExecutionInput;
+  expect: {
+    matchedReducer?: string;
+    family?: string;
+    contains?: string[];
+    excludes?: string[];
+  };
+};
+
 export type WrapOptions = {
   cwd?: string;
   store?: boolean;

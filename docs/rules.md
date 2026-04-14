@@ -95,6 +95,23 @@ that checks:
 - commands that keep falling back to `generic/fallback`
 - reducers that still save too little on real runs
 
+## fixtures
+
+builtin reducers now have fixture files under `src/rules/fixtures`.
+
+run:
+
+```bash
+tokenjuice verify --fixtures
+```
+
+that checks:
+
+- rule integrity
+- fixture loading
+- expected reducer matching
+- key text preserved or removed by the reducer
+
 ## rule-writing advice
 
 - prefer specific `match` clauses over giant regexes

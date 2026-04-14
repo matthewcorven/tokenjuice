@@ -41,6 +41,8 @@ tokenjuice stats
 
 run `tokenjuice verify` to validate the loaded rules.
 
+run `tokenjuice verify --fixtures` to validate rules plus the builtin reducer fixtures.
+
 use `tokenjuice discover` to find missing or weak reducer candidates from stored artifacts.
 
 you can also analyze a raw log directly:

@@ -64,7 +64,12 @@ async function listRuleFiles(root: string): Promise<string[]> {
         if (entry.isDirectory()) {
           return await walk(fullPath);
         }
-        if (!entry.isFile() || !entry.name.endsWith(".json") || entry.name.endsWith(".schema.json")) {
+        if (
+          !entry.isFile()
+          || !entry.name.endsWith(".json")
+          || entry.name.endsWith(".schema.json")
+          || entry.name.endsWith(".fixture.json")
+        ) {
           return [];
         }
         return [fullPath];

@@ -90,6 +90,7 @@ validate the loaded rule set:
 ```bash
 tokenjuice verify
 tokenjuice verify --format json
+tokenjuice verify --fixtures
 ```
 
 ### discover
@@ -165,6 +166,7 @@ that is intentionally boring. boring is good here.
 - make verification cheap and scriptable
 - make diagnostics artifact-driven so tuning follows real usage
 - make savings measurable per reducer and per command over time
+- keep reducer behavior pinned with fixture-backed verification
 
 ## next targets
 
