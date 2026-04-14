@@ -11,19 +11,27 @@
     "dedupeAdjacent": true,
     "trimEmptyEdges": true
   },
+  "filters": {
+    "keepPatterns": [
+      "^\\./.+",
+      "^/.+",
+      "Permission denied",
+      "No such file"
+    ]
+  },
   "summarize": {
-    "head": 12,
+    "head": 8,
     "tail": 6
   },
   "failure": {
     "preserveOnFailure": true,
-    "head": 18,
-    "tail": 12
+    "head": 12,
+    "tail": 10
   },
   "counters": [
     {
       "name": "match",
-      "pattern": ".+"
+      "pattern": "^(?!find: ).+\\S.*$"
     },
     {
       "name": "permission denied",

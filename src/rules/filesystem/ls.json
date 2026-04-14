@@ -12,18 +12,18 @@
     "trimEmptyEdges": true
   },
   "summarize": {
-    "head": 14,
-    "tail": 4
+    "head": 8,
+    "tail": 6
   },
   "failure": {
     "preserveOnFailure": true,
-    "head": 16,
+    "head": 12,
     "tail": 10
   },
   "counters": [
     {
       "name": "item",
-      "pattern": ".+"
+      "pattern": "^(?!total\\s+\\d+).+\\S.*$"
     }
   ]
 }

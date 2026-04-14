@@ -53,9 +53,11 @@ describe("rules", () => {
       "database/redis-cli",
       "database/sqlite3",
       "devops/docker-build",
+      "devops/docker-compose",
       "devops/docker-images",
       "devops/docker-logs",
       "devops/docker-ps",
+      "devops/kubectl-describe",
       "devops/kubectl-get",
       "devops/kubectl-logs",
       "filesystem/find",
@@ -136,7 +138,7 @@ describe("rules", () => {
 
   it("loads builtin fixtures successfully", async () => {
     const fixtures = await loadBuiltinFixtures();
-    expect(fixtures).toHaveLength(93);
+    expect(fixtures).toHaveLength(95);
   });
 
   it("verifies builtin fixtures cleanly", async () => {

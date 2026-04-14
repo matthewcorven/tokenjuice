@@ -513,4 +513,112 @@ describe("reduceExecution", () => {
     expect(result.inlineText).toContain("compiled with 1 error");
     expect(result.stats.ratio).toBeLessThan(0.2);
   });
+
+  it("compresses large find output while counting matches", async () => {
+    const result = await reduceExecution({
+      toolName: "exec",
+      command: "find . -name '*.ts'",
+      argv: ["find", ".", "-name", "*.ts"],
+      combinedText: Array.from({ length: 170 }, (_, index) => `./src/file-${index}.ts`).join("\n"),
+      exitCode: 0,
+    });
+
+    expect(result.classification.matchedReducer).toBe("filesystem/find");
+    expect(result.facts?.match).toBe(170);
+    expect(result.inlineText).toContain("170 matches");
+    expect(result.stats.ratio).toBeLessThan(0.15);
+  });
+
+  it("compresses large ls output while counting items", async () => {
+    const result = await reduceExecution({
+      toolName: "exec",
+      command: "ls -la",
+      argv: ["ls", "-la"],
+      combinedText: [
+        "total 128",
+        ...Array.from({ length: 160 }, (_, index) => `file-${index}.txt`),
+      ].join("\n"),
+      exitCode: 0,
+    });
+
+    expect(result.classification.matchedReducer).toBe("filesystem/ls");
+    expect(result.facts?.item).toBe(160);
+    expect(result.inlineText).toContain("160 items");
+    expect(result.stats.ratio).toBeLessThan(0.15);
+  });
+
+  it("compresses large du output while counting entries", async () => {
+    const result = await reduceExecution({
+      toolName: "exec",
+      command: "du -sh .",
+      argv: ["du", "-sh", "."],
+      combinedText: Array.from({ length: 150 }, (_, index) => `${index + 1}M\t./dir-${index}`).join("\n"),
+      exitCode: 0,
+    });
+
+    expect(result.classification.matchedReducer).toBe("system/du");
+    expect(result.facts?.entry).toBe(150);
+    expect(result.inlineText).toContain("150 entries");
+    expect(result.stats.ratio).toBeLessThan(0.15);
+  });
+
+  it("compresses large ps output while counting processes", async () => {
+    const result = await reduceExecution({
+      toolName: "exec",
+      command: "ps aux",
+      argv: ["ps", "aux"],
+      combinedText: [
+        "USER PID %CPU %MEM COMMAND",
+        ...Array.from({ length: 150 }, (_, index) => `vincent ${1000 + index} 0.0 0.${index % 10} node server-${index}.js`),
+      ].join("\n"),
+      exitCode: 0,
+    });
+
+    expect(result.classification.matchedReducer).toBe("system/ps");
+    expect(result.facts?.process).toBe(150);
+    expect(result.inlineText).toContain("150 processes");
+    expect(result.stats.ratio).toBeLessThan(0.15);
+  });
+
+  it("compresses docker compose output while keeping service rows", async () => {
+    const result = await reduceExecution({
+      toolName: "exec",
+      command: "docker compose ps",
+      argv: ["docker", "compose", "ps"],
+      combinedText: [
+        "NAME          IMAGE        COMMAND         SERVICE   STATUS           PORTS",
+        ...Array.from({ length: 120 }, (_, index) => `api-${index}      api:latest   \"node server\"   api       running(healthy) 0.0.0.0:${3000 + index}->3000/tcp`),
+      ].join("\n"),
+      exitCode: 0,
+    });
+
+    expect(result.classification.matchedReducer).toBe("devops/docker-compose");
+    expect(result.facts?.service).toBe(120);
+    expect(result.inlineText).toContain("120 services");
+    expect(result.stats.ratio).toBeLessThan(0.15);
+  });
+
+  it("compresses kubectl describe output around events and warnings", async () => {
+    const info = Array.from({ length: 120 }, (_, index) => `  Normal  Pulled  ${index + 1}m  kubelet  Successfully pulled image layer ${index}`).join("\n");
+    const result = await reduceExecution({
+      toolName: "exec",
+      command: "kubectl describe pod api-123",
+      argv: ["kubectl", "describe", "pod", "api-123"],
+      combinedText: [
+        "Name:         api-123",
+        "Namespace:    default",
+        "Status:       Running",
+        "Events:",
+        "  Type    Reason     Age   From     Message",
+        info,
+        "  Warning BackOff    1m    kubelet  Back-off restarting failed container",
+      ].join("\n"),
+      exitCode: 0,
+    });
+
+    expect(result.classification.matchedReducer).toBe("devops/kubectl-describe");
+    expect(result.inlineText).toContain("Warning BackOff");
+    expect(result.inlineText).toContain("Back-off restarting failed container");
+    expect(result.stats.ratio).toBeLessThan(0.2);
+  });
 });
