@@ -1,48 +1,247 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { readdir, readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { JsonRule } from "../types.js";
+import type { CompiledRule, JsonRule, RuleOrigin } from "../types.js";
 import { assertValidRule, validateRule } from "./validate-rules.js";
 
-const RULE_PATHS = [
-  "git/status.json",
-  "search/rg.json",
-  "generic/fallback.json",
-] as const;
+type LoadRuleOptions = {
+  cwd?: string;
+  includeUser?: boolean;
+  includeProject?: boolean;
+  userRulesDir?: string;
+  projectRulesDir?: string;
+};
 
-let cachedRules: JsonRule[] | null = null;
+type RuleDescriptor = {
+  source: RuleOrigin;
+  path: string;
+  relativePath: string;
+  rule: JsonRule;
+};
 
-async function readRule(relativePath: string): Promise<JsonRule> {
-  const rulesRoot = resolve(fileURLToPath(new URL("../rules", import.meta.url)));
-  const fullPath = resolve(rulesRoot, relativePath);
-  const raw = await readFile(fullPath, "utf8");
-  const parsed = JSON.parse(raw) as unknown;
-  assertValidRule(parsed);
-  return parsed;
+type RuleVerificationResult = {
+  id: string;
+  ok: boolean;
+  source: RuleOrigin;
+  path: string;
+  errors: string[];
+};
+
+const ruleCache = new Map<string, CompiledRule[]>();
+
+function builtinRulesRoot(): string {
+  return resolve(fileURLToPath(new URL("../rules", import.meta.url)));
 }
 
-export async function loadBuiltinRules(): Promise<JsonRule[]> {
-  if (cachedRules !== null) {
-    return cachedRules;
+function mergeRegexFlags(flags?: string): string {
+  return [...new Set(`u${flags ?? ""}`.split(""))].join("");
+}
+
+function compileRule(descriptor: RuleDescriptor): CompiledRule {
+  return {
+    rule: descriptor.rule,
+    source: descriptor.source,
+    path: descriptor.path,
+    compiled: {
+      skipPatterns: (descriptor.rule.filters?.skipPatterns ?? []).map((pattern) => new RegExp(pattern, "u")),
+      keepPatterns: (descriptor.rule.filters?.keepPatterns ?? []).map((pattern) => new RegExp(pattern, "u")),
+      counters: (descriptor.rule.counters ?? []).map((counter) => ({
+        name: counter.name,
+        pattern: new RegExp(counter.pattern, mergeRegexFlags(counter.flags)),
+      })),
+    },
+  };
+}
+
+async function listRuleFiles(root: string): Promise<string[]> {
+  async function walk(currentDir: string): Promise<string[]> {
+    const entries = await readdir(currentDir, { withFileTypes: true });
+    const files = await Promise.all(
+      entries.map(async (entry) => {
+        const fullPath = join(currentDir, entry.name);
+        if (entry.isDirectory()) {
+          return await walk(fullPath);
+        }
+        if (!entry.isFile() || !entry.name.endsWith(".json") || entry.name.endsWith(".schema.json")) {
+          return [];
+        }
+        return [fullPath];
+      }),
+    );
+    return files.flat();
   }
 
-  cachedRules = await Promise.all(RULE_PATHS.map((path) => readRule(path)));
-  return cachedRules;
+  try {
+    return await walk(root);
+  } catch {
+    return [];
+  }
 }
 
-export async function verifyBuiltinRules(): Promise<Array<{ id: string; ok: boolean; errors: string[] }>> {
-  const rulesRoot = resolve(fileURLToPath(new URL("../rules", import.meta.url)));
+function userRulesRoot(customDir?: string): string {
+  return customDir ?? join(homedir(), ".config", "tokenjuice", "rules");
+}
+
+function projectRulesRoot(cwd?: string, customDir?: string): string {
+  return customDir ?? join(cwd ?? process.cwd(), ".tokenjuice", "rules");
+}
+
+function sortRules(rules: CompiledRule[]): CompiledRule[] {
+  return [...rules].sort((left, right) => {
+    if (left.rule.id === "generic/fallback") {
+      return 1;
+    }
+    if (right.rule.id === "generic/fallback") {
+      return -1;
+    }
+    return left.rule.id.localeCompare(right.rule.id);
+  });
+}
+
+async function loadRuleDescriptorsFromRoot(root: string, source: RuleOrigin): Promise<RuleDescriptor[]> {
+  const files = await listRuleFiles(root);
   return await Promise.all(
-    RULE_PATHS.map(async (relativePath) => {
-      const fullPath = resolve(rulesRoot, relativePath);
-      const raw = JSON.parse(await readFile(fullPath, "utf8")) as unknown;
-      const result = validateRule(raw);
+    files.map(async (fullPath) => {
+      const parsed = JSON.parse(await readFile(fullPath, "utf8")) as unknown;
+      assertValidRule(parsed);
       return {
-        id: relativePath.replace(/\.json$/u, ""),
-        ok: result.ok,
-        errors: result.ok ? [] : result.errors,
+        source,
+        path: fullPath,
+        relativePath: relative(root, fullPath),
+        rule: parsed,
       };
     }),
   );
+}
+
+function cacheKey(options: LoadRuleOptions): string {
+  return JSON.stringify({
+    cwd: options.cwd ?? process.cwd(),
+    includeUser: options.includeUser ?? true,
+    includeProject: options.includeProject ?? true,
+    userRulesDir: options.userRulesDir ?? null,
+    projectRulesDir: options.projectRulesDir ?? null,
+  });
+}
+
+function overlayRules(descriptors: RuleDescriptor[]): CompiledRule[] {
+  const byId = new Map<string, RuleDescriptor>();
+  for (const descriptor of descriptors) {
+    byId.set(descriptor.rule.id, descriptor);
+  }
+  return sortRules([...byId.values()].map((descriptor) => compileRule(descriptor)));
+}
+
+export async function loadRules(options: LoadRuleOptions = {}): Promise<CompiledRule[]> {
+  const key = cacheKey(options);
+  const cached = ruleCache.get(key);
+  if (cached) {
+    return cached;
+  }
+
+  const descriptors: RuleDescriptor[] = [];
+  descriptors.push(...await loadRuleDescriptorsFromRoot(builtinRulesRoot(), "builtin"));
+
+  if (options.includeUser ?? true) {
+    descriptors.push(...await loadRuleDescriptorsFromRoot(userRulesRoot(options.userRulesDir), "user"));
+  }
+  if (options.includeProject ?? true) {
+    descriptors.push(...await loadRuleDescriptorsFromRoot(projectRulesRoot(options.cwd, options.projectRulesDir), "project"));
+  }
+
+  const compiled = overlayRules(descriptors);
+  ruleCache.set(key, compiled);
+  return compiled;
+}
+
+export async function loadBuiltinRules(): Promise<CompiledRule[]> {
+  return await loadRules({
+    includeUser: false,
+    includeProject: false,
+  });
+}
+
+export function clearRuleCache(): void {
+  ruleCache.clear();
+}
+
+async function verifyRuleRoot(root: string, source: RuleOrigin): Promise<RuleVerificationResult[]> {
+  const files = await listRuleFiles(root);
+  const results = await Promise.all(
+    files.map(async (fullPath) => {
+      try {
+        const raw = JSON.parse(await readFile(fullPath, "utf8")) as unknown;
+        const validation = validateRule(raw);
+        const errors = validation.ok ? [] : [...validation.errors];
+        if (validation.ok) {
+          try {
+            assertValidRule(raw);
+            compileRule({
+              source,
+              path: fullPath,
+              relativePath: relative(root, fullPath),
+              rule: raw,
+            });
+          } catch (error) {
+            errors.push(error instanceof Error ? error.message : String(error));
+          }
+        }
+        return {
+          id: validation.ok && typeof raw === "object" && raw !== null && "id" in raw && typeof raw.id === "string"
+            ? raw.id
+            : relative(root, fullPath).replace(/\.json$/u, ""),
+          ok: errors.length === 0,
+          source,
+          path: fullPath,
+          errors,
+        };
+      } catch (error) {
+        return {
+          id: relative(root, fullPath).replace(/\.json$/u, ""),
+          ok: false,
+          source,
+          path: fullPath,
+          errors: [error instanceof Error ? error.message : String(error)],
+        };
+      }
+    }),
+  );
+
+  const idGroups = new Map<string, RuleVerificationResult[]>();
+  for (const result of results) {
+    const group = idGroups.get(result.id) ?? [];
+    group.push(result);
+    idGroups.set(result.id, group);
+  }
+  for (const [id, group] of idGroups) {
+    if (group.length > 1) {
+      for (const result of group) {
+        result.errors.push(`duplicate rule id in ${source} layer: ${id}`);
+        result.ok = false;
+      }
+    }
+  }
+
+  return results;
+}
+
+export async function verifyRules(options: LoadRuleOptions = {}): Promise<RuleVerificationResult[]> {
+  const results: RuleVerificationResult[] = [];
+  results.push(...await verifyRuleRoot(builtinRulesRoot(), "builtin"));
+  if (options.includeUser ?? true) {
+    results.push(...await verifyRuleRoot(userRulesRoot(options.userRulesDir), "user"));
+  }
+  if (options.includeProject ?? true) {
+    results.push(...await verifyRuleRoot(projectRulesRoot(options.cwd, options.projectRulesDir), "project"));
+  }
+  return results;
+}
+
+export async function verifyBuiltinRules(): Promise<RuleVerificationResult[]> {
+  return await verifyRules({
+    includeUser: false,
+    includeProject: false,
+  });
 }

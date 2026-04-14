@@ -5,7 +5,7 @@ import { stdin as inputStdin } from "node:process";
 
 import { getArtifact, listArtifacts } from "../core/artifacts.js";
 import { reduceExecution } from "../core/reduce.js";
-import { verifyBuiltinRules } from "../core/rules.js";
+import { verifyRules } from "../core/rules.js";
 import { runWrappedCommand } from "../core/wrap.js";
 
 type Format = "text" | "json";
@@ -204,7 +204,7 @@ async function runCat(args: ParsedArgs): Promise<number> {
 }
 
 async function runVerify(args: ParsedArgs): Promise<number> {
-  const results = await verifyBuiltinRules();
+  const results = await verifyRules();
   const failed = results.filter((result) => !result.ok);
 
   if (args.format === "json") {
@@ -218,7 +218,7 @@ async function runVerify(args: ParsedArgs): Promise<number> {
   }
 
   for (const result of failed) {
-    process.stderr.write(`${result.id}\n`);
+    process.stderr.write(`${result.source}:${result.id}\n`);
     for (const error of result.errors) {
       process.stderr.write(`- ${error}\n`);
     }

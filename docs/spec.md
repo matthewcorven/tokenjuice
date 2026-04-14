@@ -1,0 +1,144 @@
+# tokenjuice spec
+
+## summary
+
+tokenjuice is a TypeScript-first output compaction system for terminal-heavy and agent-heavy workflows.
+
+it has two explicit product surfaces:
+
+- `tokenjuice`: the core library + CLI
+- host adapters like `openclaw-tokenjuice`: thin wrappers over host hooks
+
+the package reduces observed output after execution, stores the raw output as a local artifact, and keeps prompt-facing text compact and deterministic.
+
+## goals
+
+- cut transcript token waste without changing command semantics
+- keep raw output recoverable and inspectable
+- prefer deterministic reducers over vague summaries
+- keep the core host-agnostic
+- make the CLI clean enough for npm first, then brew/apt/dnf packaging
+
+## non-goals
+
+- silent command rewriting by default
+- turning v1 into an LLM summarizer
+- becoming a shell framework
+- trying to solve every tool class in one release
+
+## architecture
+
+### core package
+
+the core package owns:
+
+- classification
+- reduction
+- artifact storage
+- rule loading and validation
+- CLI behavior
+
+the public model is deliberately plain-object heavy. no framework assumptions, no giant class graph.
+
+### adapters
+
+host adapters should own:
+
+- hook wiring
+- host-specific storage defaults
+- message conversion
+- retrieval seams when needed
+
+if reducer logic starts leaking into an adapter, the boundary is wrong.
+
+## operating modes
+
+### reduce
+
+reduce text from stdin or a file:
+
+```bash
+tokenjuice reduce
+tokenjuice reduce build.log
+pnpm test 2>&1 | tokenjuice reduce
+```
+
+### wrap
+
+explicitly run a command through tokenjuice:
+
+```bash
+tokenjuice wrap -- git status
+tokenjuice wrap -- pnpm test
+```
+
+this is command wrapping, not command rewriting.
+
+### artifact
+
+inspect stored raw output:
+
+```bash
+tokenjuice ls
+tokenjuice cat tj_xxxxx
+```
+
+### verify
+
+validate the loaded rule set:
+
+```bash
+tokenjuice verify
+tokenjuice verify --format json
+```
+
+## rule model
+
+tokenjuice uses JSON rules because they are easy to parse, easy to validate, and easy to inspect in tooling.
+
+rule behavior is intentionally small:
+
+- `match`
+- `filters`
+- `transforms`
+- `summarize`
+- `failure`
+- `counters`
+
+more power belongs in the core engine first. a huge DSL too early is how these tools get gross.
+
+## rule precedence
+
+rules load in this order:
+
+1. built-in rules
+2. user rules from `~/.config/tokenjuice/rules`
+3. project rules from `.tokenjuice/rules`
+
+later layers override earlier ones by rule id.
+
+this gives a sane default without forcing people to fork the package for one weird project.
+
+## artifact model
+
+artifacts are file-backed in v1:
+
+- one raw text file
+- one metadata JSON file
+
+that is intentionally boring. boring is good here.
+
+## reliability priorities
+
+- validate rule structure before loading
+- compile regex once at load time, not every reduction call
+- keep fallback behavior deterministic
+- preserve more context on non-zero exits
+- make verification cheap and scriptable
+
+## next targets
+
+- `discover`
+- `doctor`
+- more reducers for tests and build output
+- better host adapters

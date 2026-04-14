@@ -1,9 +1,9 @@
-import { loadBuiltinRules } from "./rules.js";
+import { loadRules } from "./rules.js";
 import { classifyExecution, matchesRule } from "./classify.js";
 import { clampText, dedupeAdjacent, headTail, normalizeLines, pluralize, stripAnsi, trimEmptyEdges } from "./text.js";
 import { storeArtifact } from "./artifacts.js";
 
-import type { CompactResult, JsonRule, ReduceOptions, ToolExecutionInput } from "../types.js";
+import type { CompactResult, CompiledRule, ReduceOptions, ToolExecutionInput } from "../types.js";
 
 function buildRawText(input: ToolExecutionInput): string {
   if (input.combinedText) {
@@ -21,7 +21,8 @@ function buildRawText(input: ToolExecutionInput): string {
   return `${stdout}\n${stderr}`;
 }
 
-function applyRule(rule: JsonRule, input: ToolExecutionInput, rawText: string): { summary: string; facts: Record<string, number> } {
+function applyRule(compiledRule: CompiledRule, input: ToolExecutionInput, rawText: string): { summary: string; facts: Record<string, number> } {
+  const rule = compiledRule.rule;
   let lines = normalizeLines(rawText);
   const facts: Record<string, number> = {};
 
@@ -30,13 +31,11 @@ function applyRule(rule: JsonRule, input: ToolExecutionInput, rawText: string): 
   }
 
   if (rule.filters?.skipPatterns?.length) {
-    const skipPatterns = rule.filters.skipPatterns.map((pattern) => new RegExp(pattern, "u"));
-    lines = lines.filter((line) => !skipPatterns.some((pattern) => pattern.test(line)));
+    lines = lines.filter((line) => !compiledRule.compiled.skipPatterns.some((pattern) => pattern.test(line)));
   }
 
   if (rule.filters?.keepPatterns?.length) {
-    const keepPatterns = rule.filters.keepPatterns.map((pattern) => new RegExp(pattern, "u"));
-    const kept = lines.filter((line) => keepPatterns.some((pattern) => pattern.test(line)));
+    const kept = lines.filter((line) => compiledRule.compiled.keepPatterns.some((pattern) => pattern.test(line)));
     if (kept.length > 0) {
       lines = kept;
     }
@@ -50,8 +49,8 @@ function applyRule(rule: JsonRule, input: ToolExecutionInput, rawText: string): 
     lines = dedupeAdjacent(lines);
   }
 
-  for (const counter of rule.counters ?? []) {
-    const pattern = new RegExp(counter.pattern, counter.flags ? `u${counter.flags}` : "u");
+  for (const counter of compiledRule.compiled.counters) {
+    const pattern = counter.pattern;
     facts[counter.name] = lines.filter((line) => pattern.test(line)).length;
   }
 
@@ -97,11 +96,13 @@ function formatInline(
 }
 
 export async function reduceExecution(input: ToolExecutionInput, opts: ReduceOptions = {}): Promise<CompactResult> {
-  const rules = await loadBuiltinRules();
+  const rules = await loadRules({
+    ...(opts.cwd ? { cwd: opts.cwd } : {}),
+  });
   const classification = classifyExecution(input, rules, opts.classifier);
   const rawText = buildRawText(input);
-  const matchedRule = rules.find((rule) => rule.id === classification.matchedReducer)
-    ?? rules.find((rule) => rule.id === "generic/fallback");
+  const matchedRule = rules.find((rule) => rule.rule.id === classification.matchedReducer)
+    ?? rules.find((rule) => rule.rule.id === "generic/fallback");
 
   if (!matchedRule) {
     throw new Error("missing generic fallback rule");
@@ -138,11 +139,11 @@ export async function reduceExecution(input: ToolExecutionInput, opts: ReduceOpt
 }
 
 export async function classifyOnly(input: ToolExecutionInput, forcedRuleId?: string) {
-  const rules = await loadBuiltinRules();
+  const rules = await loadRules();
   return classifyExecution(input, rules, forcedRuleId);
 }
 
-export async function findMatchingRule(input: ToolExecutionInput): Promise<JsonRule | undefined> {
-  const rules = await loadBuiltinRules();
+export async function findMatchingRule(input: ToolExecutionInput): Promise<CompiledRule | undefined> {
+  const rules = await loadRules();
   return rules.find((rule) => matchesRule(rule, input));
 }

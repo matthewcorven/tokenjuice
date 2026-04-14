@@ -15,6 +15,7 @@ tool output wastes absurd amounts of context.
 - explicit `reduce` and `wrap` modes
 - file-backed artifacts that are easy to debug
 - no silent command rewrite
+- speed and reliability over gimmicks
 
 ## commands
 
@@ -23,8 +24,23 @@ tokenjuice reduce [file]
 tokenjuice wrap -- <command> [args...]
 tokenjuice ls
 tokenjuice cat <artifact-id>
+tokenjuice verify
 ```
+
+## rule system
+
+- built-in JSON rules live in `src/rules`
+- user overrides live in `~/.config/tokenjuice/rules`
+- project overrides live in `.tokenjuice/rules`
+- later layers override earlier ones by rule id
+
+run `tokenjuice verify` to validate the loaded rules.
+
+## docs
+
+- spec: `docs/spec.md`
+- rules: `docs/rules.md`
 
 ## status
 
-first implementation slice. enough to shape the package and prove the core loop.
+usable foundation, now focused on hardening the rule system and expanding reducer coverage.

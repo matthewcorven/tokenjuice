@@ -1,10 +1,17 @@
-import type { ClassificationResult, JsonRule, ToolExecutionInput } from "../types.js";
+import type { ClassificationResult, CompiledRule, JsonRule, ToolExecutionInput } from "../types.js";
 
 function includesAll(argv: string[], expected: string[]): boolean {
   return expected.every((part) => argv.includes(part));
 }
 
-export function matchesRule(rule: JsonRule, input: ToolExecutionInput): boolean {
+type RuleLike = JsonRule | CompiledRule;
+
+function getJsonRule(rule: RuleLike): JsonRule {
+  return "rule" in rule ? rule.rule : rule;
+}
+
+export function matchesRule(ruleLike: RuleLike, input: ToolExecutionInput): boolean {
+  const rule = getJsonRule(ruleLike);
   const argv = input.argv ?? [];
   const command = input.command ?? "";
   const toolName = input.toolName;
@@ -30,16 +37,17 @@ export function matchesRule(rule: JsonRule, input: ToolExecutionInput): boolean 
 
 export function classifyExecution(
   input: ToolExecutionInput,
-  rules: JsonRule[],
+  rules: RuleLike[],
   forcedRuleId?: string,
 ): ClassificationResult {
   if (forcedRuleId) {
-    const forcedRule = rules.find((rule) => rule.id === forcedRuleId);
+    const forcedRule = rules.find((rule) => getJsonRule(rule).id === forcedRuleId);
     if (forcedRule) {
+      const forced = getJsonRule(forcedRule);
       return {
-        family: forcedRule.family,
+        family: forced.family,
         confidence: 1,
-        matchedReducer: forcedRule.id,
+        matchedReducer: forced.id,
       };
     }
   }
@@ -52,9 +60,10 @@ export function classifyExecution(
     };
   }
 
+  const rule = getJsonRule(matchedRule);
   return {
-    family: matchedRule.family,
-    confidence: matchedRule.id === "generic/fallback" ? 0.2 : 0.9,
-    matchedReducer: matchedRule.id,
+    family: rule.family,
+    confidence: rule.id === "generic/fallback" ? 0.2 : 0.9,
+    matchedReducer: rule.id,
   };
 }

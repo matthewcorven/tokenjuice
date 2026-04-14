@@ -64,6 +64,22 @@ export type JsonRule = {
   failure?: RuleFailure;
 };
 
+export type RuleOrigin = "builtin" | "user" | "project";
+
+export type CompiledRule = {
+  rule: JsonRule;
+  source: RuleOrigin;
+  path: string;
+  compiled: {
+    skipPatterns: RegExp[];
+    keepPatterns: RegExp[];
+    counters: Array<{
+      name: string;
+      pattern: RegExp;
+    }>;
+  };
+};
+
 export type ClassificationResult = {
   family: string;
   confidence: number;
@@ -113,6 +129,7 @@ export type ReduceOptions = {
   maxInlineChars?: number;
   store?: boolean;
   storeDir?: string;
+  cwd?: string;
 };
 
 export type ReduceExecutionResult = CompactResult;
