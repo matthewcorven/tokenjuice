@@ -40,9 +40,7 @@ tokenjuice stats
 - later layers override earlier ones by rule id
 
 run `tokenjuice verify` to validate the loaded rules.
-
 run `tokenjuice verify --fixtures` to validate rules plus the builtin reducer fixtures.
-
 use `tokenjuice discover` to find missing or weak reducer candidates from stored artifacts.
 
 you can also analyze a raw log directly:
@@ -53,7 +51,6 @@ cat build.log | tokenjuice doctor --source-command "pnpm eslint src" --exit-code
 ```
 
 use `tokenjuice doctor` to inspect coverage, generic fallbacks, weak reducers, and savings ratios.
-
 use `tokenjuice stats` to see reducer-level savings, top commands, and simple daily totals from stored artifacts.
 
 ## docs
