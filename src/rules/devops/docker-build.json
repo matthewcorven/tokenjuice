@@ -1,0 +1,36 @@
+{
+  "id": "devops/docker-build",
+  "family": "container-build",
+  "description": "Compact docker build output while preserving real failures and final stages.",
+  "match": {
+    "toolNames": ["exec"],
+    "argv0": ["docker"],
+    "argvIncludes": [["build"]]
+  },
+  "transforms": {
+    "stripAnsi": true,
+    "dedupeAdjacent": true,
+    "trimEmptyEdges": true
+  },
+  "summarize": {
+    "head": 12,
+    "tail": 10
+  },
+  "failure": {
+    "preserveOnFailure": true,
+    "head": 18,
+    "tail": 16
+  },
+  "counters": [
+    {
+      "name": "step",
+      "pattern": "^#\\d+",
+      "flags": "m"
+    },
+    {
+      "name": "error",
+      "pattern": "error",
+      "flags": "i"
+    }
+  ]
+}

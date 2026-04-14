@@ -28,6 +28,12 @@ describe("rules", () => {
       "build/tsdown",
       "build/vite",
       "build/webpack",
+      "devops/docker-build",
+      "devops/docker-images",
+      "devops/docker-logs",
+      "devops/docker-ps",
+      "devops/kubectl-get",
+      "devops/kubectl-logs",
       "filesystem/find",
       "filesystem/ls",
       "git/branch",
@@ -49,6 +55,11 @@ describe("rules", () => {
       "search/git-grep",
       "search/grep",
       "search/rg",
+      "system/df",
+      "system/du",
+      "system/ps",
+      "task/just",
+      "task/make",
       "tests/bun-test",
       "tests/cargo-test",
       "tests/go-test",
@@ -71,7 +82,7 @@ describe("rules", () => {
 
   it("loads builtin fixtures successfully", async () => {
     const fixtures = await loadBuiltinFixtures();
-    expect(fixtures).toHaveLength(38);
+    expect(fixtures).toHaveLength(49);
   });
 
   it("verifies builtin fixtures cleanly", async () => {

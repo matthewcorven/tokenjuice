@@ -1,0 +1,30 @@
+{
+  "id": "devops/docker-images",
+  "family": "container-images",
+  "description": "Compact docker images output while preserving image rows.",
+  "match": {
+    "toolNames": ["exec"],
+    "argv0": ["docker"],
+    "argvIncludes": [["images"]]
+  },
+  "transforms": {
+    "stripAnsi": true,
+    "dedupeAdjacent": true,
+    "trimEmptyEdges": true
+  },
+  "summarize": {
+    "head": 14,
+    "tail": 4
+  },
+  "failure": {
+    "preserveOnFailure": true,
+    "head": 16,
+    "tail": 12
+  },
+  "counters": [
+    {
+      "name": "image",
+      "pattern": ".+"
+    }
+  ]
+}

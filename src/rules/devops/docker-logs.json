@@ -1,0 +1,36 @@
+{
+  "id": "devops/docker-logs",
+  "family": "container-logs",
+  "description": "Compact docker logs output while preserving early and late log lines.",
+  "match": {
+    "toolNames": ["exec"],
+    "argv0": ["docker"],
+    "argvIncludes": [["logs"]]
+  },
+  "transforms": {
+    "stripAnsi": true,
+    "dedupeAdjacent": true,
+    "trimEmptyEdges": true
+  },
+  "summarize": {
+    "head": 10,
+    "tail": 10
+  },
+  "failure": {
+    "preserveOnFailure": true,
+    "head": 16,
+    "tail": 20
+  },
+  "counters": [
+    {
+      "name": "error",
+      "pattern": "error",
+      "flags": "i"
+    },
+    {
+      "name": "warning",
+      "pattern": "warn",
+      "flags": "i"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "id": "devops/kubectl-get",
+  "family": "kubernetes-list",
+  "description": "Compact kubectl get output while preserving resource rows.",
+  "match": {
+    "toolNames": ["exec"],
+    "argv0": ["kubectl"],
+    "argvIncludes": [["get"]]
+  },
+  "transforms": {
+    "stripAnsi": true,
+    "dedupeAdjacent": true,
+    "trimEmptyEdges": true
+  },
+  "summarize": {
+    "head": 14,
+    "tail": 4
+  },
+  "failure": {
+    "preserveOnFailure": true,
+    "head": 16,
+    "tail": 12
+  },
+  "counters": [
+    {
+      "name": "resource",
+      "pattern": ".+"
+    }
+  ]
+}
