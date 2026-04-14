@@ -52,6 +52,13 @@ describe("rules", () => {
       "lint/eslint",
       "lint/oxlint",
       "lint/prettier-check",
+      "network/curl",
+      "network/dig",
+      "network/nslookup",
+      "network/ping",
+      "network/ssh",
+      "network/traceroute",
+      "network/wget",
       "search/git-grep",
       "search/grep",
       "search/rg",
@@ -82,7 +89,7 @@ describe("rules", () => {
 
   it("loads builtin fixtures successfully", async () => {
     const fixtures = await loadBuiltinFixtures();
-    expect(fixtures).toHaveLength(49);
+    expect(fixtures).toHaveLength(56);
   });
 
   it("verifies builtin fixtures cleanly", async () => {
