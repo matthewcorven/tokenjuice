@@ -83,6 +83,25 @@ const WEAK_RATIO_THRESHOLD = 0.65;
 const MISSING_RAW_CHARS_THRESHOLD = 200;
 const WEAK_RAW_CHARS_THRESHOLD = 500;
 
+function clampRatio(value: number): number {
+  return Math.min(Math.max(value, 0), 1);
+}
+
+function effectiveReducedChars(metadata: StoredArtifactMetadata): number {
+  const reduced = metadata.reducedChars ?? metadata.rawChars;
+  return Math.min(Math.max(reduced, 0), metadata.rawChars);
+}
+
+function effectiveRatio(metadata: StoredArtifactMetadata): number | null {
+  if (metadata.rawChars === 0) {
+    return 1;
+  }
+  if (typeof metadata.ratio === "number") {
+    return clampRatio(metadata.ratio);
+  }
+  return clampRatio(effectiveReducedChars(metadata) / metadata.rawChars);
+}
+
 function tokenize(command: string): string[] {
   return command.trim().split(/\s+/u).filter(Boolean);
 }
@@ -154,8 +173,9 @@ function groupCandidates(entries: Array<AnalysisEntry & { kind: DiscoverCandidat
     };
     existing.count += 1;
     existing.totalRawChars += entry.metadata.rawChars;
-    if (typeof entry.metadata.ratio === "number") {
-      existing.ratioSum += entry.metadata.ratio;
+    const ratio = effectiveRatio(entry.metadata);
+    if (ratio !== null) {
+      existing.ratioSum += ratio;
       existing.ratioCount += 1;
     }
     groups.set(key, existing);
@@ -258,12 +278,13 @@ type StatsGroup = {
 };
 
 function addToStatsGroup(group: StatsGroup | undefined, entry: AnalysisEntry): StatsGroup {
+  const ratio = effectiveRatio(entry.metadata);
   return {
     count: (group?.count ?? 0) + 1,
     rawChars: (group?.rawChars ?? 0) + entry.metadata.rawChars,
-    reducedChars: (group?.reducedChars ?? 0) + (entry.metadata.reducedChars ?? entry.metadata.rawChars),
-    ratioSum: (group?.ratioSum ?? 0) + (entry.metadata.ratio ?? 1),
-    ratioCount: (group?.ratioCount ?? 0) + (typeof entry.metadata.ratio === "number" ? 1 : 0),
+    reducedChars: (group?.reducedChars ?? 0) + effectiveReducedChars(entry.metadata),
+    ratioSum: (group?.ratioSum ?? 0) + (ratio ?? 0),
+    ratioCount: (group?.ratioCount ?? 0) + (ratio !== null ? 1 : 0),
   };
 }
 
@@ -289,12 +310,13 @@ export function statsArtifacts(entries: AnalysisEntry[]): StatsReport {
     const reducer = entry.metadata.classification.matchedReducer ?? "generic/fallback";
     const signature = normalizeCommandSignature(entry.metadata.command) ?? "(unknown)";
     const day = isoDay(entry.metadata.createdAt);
-    const reduced = entry.metadata.reducedChars ?? entry.metadata.rawChars;
+    const reduced = effectiveReducedChars(entry.metadata);
+    const ratio = effectiveRatio(entry.metadata);
 
     rawChars += entry.metadata.rawChars;
     reducedChars += reduced;
-    if (typeof entry.metadata.ratio === "number") {
-      ratioSum += entry.metadata.ratio;
+    if (ratio !== null) {
+      ratioSum += ratio;
       ratioCount += 1;
     }
 
@@ -303,16 +325,16 @@ export function statsArtifacts(entries: AnalysisEntry[]): StatsReport {
     daily.set(day, addToStatsGroup(daily.get(day), entry));
   }
 
-  const savedChars = rawChars - reducedChars;
+  const totalSavedChars = Math.max(rawChars - reducedChars, 0);
   const avgRatio = ratioCount > 0 ? ratioSum / ratioCount : null;
-  const savingsPercent = rawChars > 0 ? savedChars / rawChars : null;
+  const savingsPercent = rawChars > 0 ? totalSavedChars / rawChars : null;
 
   return {
     totals: {
       entries: entries.length,
       rawChars,
       reducedChars,
-      savedChars,
+      savedChars: totalSavedChars,
       avgRatio,
       savingsPercent,
     },
@@ -322,7 +344,7 @@ export function statsArtifacts(entries: AnalysisEntry[]): StatsReport {
         count: group.count,
         rawChars: group.rawChars,
         reducedChars: group.reducedChars,
-        savedChars: group.rawChars - group.reducedChars,
+        savedChars: Math.max(group.rawChars - group.reducedChars, 0),
         avgRatio: avgRatioFromGroup(group),
       }))
       .sort((left, right) => right.savedChars - left.savedChars || right.count - left.count)
@@ -333,7 +355,7 @@ export function statsArtifacts(entries: AnalysisEntry[]): StatsReport {
         count: group.count,
         rawChars: group.rawChars,
         reducedChars: group.reducedChars,
-        savedChars: group.rawChars - group.reducedChars,
+        savedChars: Math.max(group.rawChars - group.reducedChars, 0),
         avgRatio: avgRatioFromGroup(group),
       }))
       .sort((left, right) => right.savedChars - left.savedChars || right.count - left.count)
@@ -344,7 +366,7 @@ export function statsArtifacts(entries: AnalysisEntry[]): StatsReport {
         count: group.count,
         rawChars: group.rawChars,
         reducedChars: group.reducedChars,
-        savedChars: group.rawChars - group.reducedChars,
+        savedChars: Math.max(group.rawChars - group.reducedChars, 0),
       }))
       .sort((left, right) => left.day.localeCompare(right.day)),
   };
@@ -352,8 +374,8 @@ export function statsArtifacts(entries: AnalysisEntry[]): StatsReport {
 
 export function doctorArtifacts(entries: AnalysisEntry[]): DoctorReport {
   const ratios = entries
-    .map((entry) => entry.metadata.ratio)
-    .filter((ratio): ratio is number => typeof ratio === "number");
+    .map((entry) => effectiveRatio(entry.metadata))
+    .filter((ratio): ratio is number => ratio !== null);
   const discover = discoverCandidates(entries);
 
   const reducerCounts = new Map<string, number>();

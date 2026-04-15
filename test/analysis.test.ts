@@ -130,4 +130,48 @@ describe("analysis", () => {
     expect(report.commands.length).toBeGreaterThan(0);
     expect(report.daily.length).toBe(1);
   });
+
+  it("clamps expanded artifact ratios in stats and doctor output", () => {
+    const entries = [
+      {
+        metadata: {
+          createdAt: "2026-04-15T00:00:00.000Z",
+          command: "node -e console.log('x')",
+          classification: {
+            family: "generic",
+            confidence: 1,
+            matchedReducer: "generic/fallback",
+          },
+          rawChars: 100,
+          reducedChars: 250,
+          ratio: 2.5,
+        },
+      },
+      {
+        metadata: {
+          createdAt: "2026-04-15T00:01:00.000Z",
+          command: "pnpm test",
+          classification: {
+            family: "tests",
+            confidence: 1,
+            matchedReducer: "tests/pnpm-test",
+          },
+          rawChars: 200,
+          reducedChars: 50,
+          ratio: 0.25,
+        },
+      },
+    ];
+
+    const stats = statsArtifacts(entries);
+    const doctor = doctorArtifacts(entries);
+
+    expect(stats.totals.rawChars).toBe(300);
+    expect(stats.totals.reducedChars).toBe(150);
+    expect(stats.totals.savedChars).toBe(150);
+    expect(stats.totals.avgRatio).toBe(0.625);
+    expect(stats.totals.savingsPercent).toBe(0.5);
+    expect(stats.reducers.find((entry) => entry.reducer === "generic/fallback")?.savedChars).toBe(0);
+    expect(doctor.totals.avgRatio).toBe(0.625);
+  });
 });
