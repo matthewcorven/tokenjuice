@@ -84,5 +84,5 @@ linux packages are built from the same compiled payload:
 
 publishing follows the `autosecure` pattern too:
 
-- main release workflow can push to Cloudsmith when secrets are set
+- main release workflow can push to Cloudsmith for the fixed `vincentkoc/tokenjuice` repo
 - manual `publish-apt.yml` and `publish-rpm.yml` workflows exist for retries/backfills
