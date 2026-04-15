@@ -2,8 +2,26 @@
   "name": "tokenjuice",
   "version": "0.1.0",
   "description": "Lean output compaction for terminal-heavy agent workflows.",
+  "keywords": [
+    "cli",
+    "terminal",
+    "llm",
+    "tokens",
+    "context",
+    "developer-tools"
+  ],
+  "homepage": "https://github.com/vincentkoc/tokenjuice",
+  "bugs": {
+    "url": "https://github.com/vincentkoc/tokenjuice/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vincentkoc/tokenjuice.git"
+  },
   "license": "MIT",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "bin": {
     "tokenjuice": "./dist/cli/main.js"
   },
@@ -22,6 +40,9 @@
     "bench:fixtures": "node scripts/bench.mjs fixtures",
     "bench:verify": "node scripts/bench.mjs verify",
     "build": "rm -rf dist && tsc -p tsconfig.json && mkdir -p dist/rules && cp -R src/rules/. dist/rules/",
+    "release:artifacts": "node scripts/build-release.mjs",
+    "release:formula": "node scripts/generate-homebrew-formula.mjs",
+    "release:local": "pnpm test && pnpm build && pnpm release:artifacts && pnpm release:formula",
     "smoke:live": "node scripts/live-smoke.mjs",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"

@@ -4,6 +4,25 @@
 
 lean output compaction for terminal-heavy agent workflows.
 
+## install
+
+```bash
+npm install -g tokenjuice
+# or
+pnpm add -g tokenjuice
+# or
+yarn global add tokenjuice
+```
+
+then:
+
+```bash
+tokenjuice --help
+tokenjuice --version
+```
+
+for release artifacts and Homebrew packaging, see `docs/distribution.md`.
+
 ## why
 
 tool output wastes absurd amounts of context. your llm needs a diet.
@@ -22,6 +41,8 @@ tokenjuice compacts observed output after execution, keeps the raw output as a l
 ## commands
 
 ```bash
+tokenjuice --help
+tokenjuice --version
 tokenjuice reduce [file]
 tokenjuice reduce-json [file]
 tokenjuice wrap -- <command> [args...]

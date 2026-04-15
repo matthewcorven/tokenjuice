@@ -2,6 +2,7 @@
 
 import { readFile } from "node:fs/promises";
 import { stdin as inputStdin } from "node:process";
+import packageJson from "../../package.json" with { type: "json" };
 
 import { getArtifact, listArtifactMetadata, listArtifacts } from "../core/artifacts.js";
 import { buildAnalysisEntry, discoverCandidates, doctorArtifacts, statsArtifacts } from "../core/analysis.js";
@@ -29,10 +30,14 @@ type ParsedArgs = {
   passthrough: string[];
 };
 
+const VERSION = packageJson.version;
+
 function printUsage(): void {
   process.stderr.write(
     [
       "usage:",
+      "  tokenjuice --help",
+      "  tokenjuice --version",
       "  tokenjuice reduce [file] [--format text|json] [--classifier <id>] [--store]",
       "  tokenjuice reduce-json [file]",
       "  tokenjuice wrap -- <command> [args...] [--tee] [--store]",
@@ -469,6 +474,17 @@ async function runStats(args: ParsedArgs): Promise<number> {
 async function main(): Promise<number> {
   const args = parseArgs(process.argv.slice(2));
   switch (args.command) {
+    case undefined:
+    case "help":
+    case "--help":
+    case "-h":
+      printUsage();
+      return 0;
+    case "version":
+    case "--version":
+    case "-v":
+      process.stdout.write(`${VERSION}\n`);
+      return 0;
     case "reduce":
       return await runReduce(args);
     case "reduce-json":

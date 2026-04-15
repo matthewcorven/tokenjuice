@@ -188,3 +188,14 @@ that is intentionally boring. boring is good here.
 - `doctor`
 - more reducers for tests and build output
 - better host adapters
+
+## distribution
+
+tokenjuice should ship as a real terminal app through one compiled path:
+
+- build TypeScript to runnable JavaScript in `dist/`
+- publish the npm package with the `tokenjuice` bin entry
+- generate a GitHub release tarball with `dist/` plus a small launcher
+- generate a Homebrew formula from that tarball
+
+that keeps npm, `npx`, global installs, and Homebrew aligned around one executable surface instead of juggling a second native-binary path too early.

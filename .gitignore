@@ -3,5 +3,6 @@ dist
 .DS_Store
 coverage
 *.log
+release
 test/**/*.js
 test/**/*.d.ts
