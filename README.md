@@ -12,6 +12,9 @@ npm install -g tokenjuice
 pnpm add -g tokenjuice
 # or
 yarn global add tokenjuice
+# or
+brew tap vincentkoc/homebrew-tap
+brew install tokenjuice
 ```
 
 then:
@@ -20,24 +23,6 @@ then:
 tokenjuice --help
 tokenjuice --version
 ```
-
-Homebrew:
-
-```bash
-brew tap vincentkoc/homebrew-tap
-brew install tokenjuice
-```
-
-linux package repos follow the same pattern as `autosecure`: GitHub release assets plus optional Cloudsmith-backed `.deb` and `.rpm` publishing from the release workflows.
-
-for release artifacts and Homebrew packaging, see `docs/distribution.md`.
-
-package repos follow the same split you already use elsewhere:
-
-- npm for `npm`, `pnpm`, `yarn`, and `npx`
-- GitHub Releases for tarballs and checksums
-- Homebrew tap sync for macOS install
-- Cloudsmith-backed `.deb` and `.rpm` for Linux package repos
 
 ## why
 
@@ -107,22 +92,6 @@ envelope payload:
 }
 ```
 
-## bench
-
-```bash
-pnpm bench:fixtures
-pnpm bench:verify
-pnpm smoke:live
-```
-
-## security notes
-
-- `wrap` does not persist raw output unless you pass `--store`
-- stored artifacts use private file modes on unix-like systems
-- artifact ids are validated before lookup
-- `wrap` capture is bounded to avoid unbounded memory growth from noisy commands
-- direct file/stdin reductions enforce a max input size by default
-
 ## rule system
 
 - built-in JSON rules live in `src/rules`
@@ -137,6 +106,6 @@ pnpm smoke:live
 
 ## status
 
-usable foundation with diagnostics and a growing reducer set, now focused on deeper coverage and tuning.
+usable foundation for token reduction with diagnostics and a growing reducer set, now focused on deeper coverage and tuning.
 
 💙 built by [Vincent Koc](https://github.com/vincentkoc).
