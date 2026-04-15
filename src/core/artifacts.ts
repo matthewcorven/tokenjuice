@@ -7,11 +7,21 @@ import { countTextChars, stripAnsi } from "./text.js";
 
 import type { ArtifactMetadataRef, StoredArtifact, StoredArtifactInput, StoredArtifactMetadata, StoredArtifactRef } from "../types.js";
 
+const ARTIFACT_ID_PATTERN = /^tj_[0-9a-f-]{12}$/iu;
+
 function artifactBaseDir(storeDir?: string): string {
   return storeDir ?? join(homedir(), ".tokenjuice", "artifacts");
 }
 
+export function isValidArtifactId(id: string): boolean {
+  return ARTIFACT_ID_PATTERN.test(id);
+}
+
 function buildArtifactPaths(id: string, storeDir?: string): StoredArtifactRef {
+  if (!isValidArtifactId(id)) {
+    throw new Error(`invalid artifact id: ${id}`);
+  }
+
   const base = artifactBaseDir(storeDir);
   return {
     id,
@@ -24,7 +34,7 @@ function buildArtifactPaths(id: string, storeDir?: string): StoredArtifactRef {
 export async function storeArtifact(input: StoredArtifactInput, storeDir?: string): Promise<StoredArtifactRef> {
   const id = `tj_${randomUUID().slice(0, 12)}`;
   const ref = buildArtifactPaths(id, storeDir);
-  await mkdir(artifactBaseDir(storeDir), { recursive: true });
+  await mkdir(artifactBaseDir(storeDir), { recursive: true, mode: 0o700 });
 
   const artifact: StoredArtifact = {
     id,
@@ -41,14 +51,18 @@ export async function storeArtifact(input: StoredArtifactInput, storeDir?: strin
   };
 
   await Promise.all([
-    writeFile(ref.path, input.rawText, "utf8"),
-    writeFile(ref.metadataPath, JSON.stringify(artifact.metadata, null, 2), "utf8"),
+    writeFile(ref.path, input.rawText, { encoding: "utf8", mode: 0o600 }),
+    writeFile(ref.metadataPath, JSON.stringify(artifact.metadata, null, 2), { encoding: "utf8", mode: 0o600 }),
   ]);
 
   return ref;
 }
 
 export async function getArtifact(id: string, storeDir?: string): Promise<StoredArtifact | null> {
+  if (!isValidArtifactId(id)) {
+    return null;
+  }
+
   const ref = buildArtifactPaths(id, storeDir);
   try {
     const [rawText, metadataRaw] = await Promise.all([
@@ -72,6 +86,7 @@ export async function listArtifacts(storeDir?: string): Promise<StoredArtifactRe
     return files
       .filter((name) => name.endsWith(".json"))
       .map((name) => name.replace(/\.json$/u, ""))
+      .filter((id) => isValidArtifactId(id))
       .sort()
       .reverse()
       .map((id) => buildArtifactPaths(id, storeDir));
