@@ -26,6 +26,7 @@ type ParsedArgs = {
   tee: boolean;
   storeDir: string | undefined;
   maxInlineChars: number | undefined;
+  maxCaptureBytes: number | undefined;
   positionals: string[];
   passthrough: string[];
 };
@@ -40,7 +41,7 @@ function printUsage(): void {
       "  tokenjuice --version",
       "  tokenjuice reduce [file] [--format text|json] [--classifier <id>] [--store]",
       "  tokenjuice reduce-json [file]",
-      "  tokenjuice wrap -- <command> [args...] [--tee] [--store]",
+      "  tokenjuice wrap -- <command> [args...] [--tee] [--store] [--max-capture-bytes <n>]",
       "  tokenjuice ls",
       "  tokenjuice cat <artifact-id>",
       "  tokenjuice verify [--fixtures]",
@@ -66,6 +67,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   let tee = false;
   let storeDir: string | undefined;
   let maxInlineChars: number | undefined;
+  let maxCaptureBytes: number | undefined;
 
   let index = 1;
   while (index < argv.length) {
@@ -138,10 +140,17 @@ function parseArgs(argv: string[]): ParsedArgs {
         index += 2;
         break;
       case "--max-inline-chars":
-        if (!next || Number.isNaN(Number(next))) {
-          throw new Error("--max-inline-chars requires a number");
+        if (!next || !Number.isInteger(Number(next)) || Number(next) <= 0) {
+          throw new Error("--max-inline-chars requires a positive integer");
         }
         maxInlineChars = Number(next);
+        index += 2;
+        break;
+      case "--max-capture-bytes":
+        if (!next || !Number.isInteger(Number(next)) || Number(next) <= 0) {
+          throw new Error("--max-capture-bytes requires a positive integer");
+        }
+        maxCaptureBytes = Number(next);
         index += 2;
         break;
       default:
@@ -161,6 +170,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     tee,
     storeDir,
     maxInlineChars,
+    maxCaptureBytes,
     positionals,
     passthrough,
   };
@@ -232,6 +242,7 @@ async function runWrap(args: ParsedArgs): Promise<number> {
     ...(args.store ? { store: true } : {}),
     ...(args.storeDir ? { storeDir: args.storeDir } : {}),
     ...(typeof args.maxInlineChars === "number" ? { maxInlineChars: args.maxInlineChars } : {}),
+    ...(typeof args.maxCaptureBytes === "number" ? { maxCaptureBytes: args.maxCaptureBytes } : {}),
   });
   emit(args.format, wrapped, wrapped.result.inlineText);
   return wrapped.exitCode;

@@ -179,6 +179,7 @@ export type WrapOptions = {
   storeDir?: string;
   tee?: boolean;
   maxInlineChars?: number;
+  maxCaptureBytes?: number;
 };
 
 export type WrapResult = {
