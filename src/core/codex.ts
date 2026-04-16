@@ -6,6 +6,7 @@ import packageJson from "../../package.json" with { type: "json" };
 
 import { isCompoundShellCommand, isRepositoryInspectionCommand } from "./command.js";
 import { reduceExecution } from "./reduce.js";
+import { countTextChars, stripAnsi } from "./text.js";
 
 import type { CompactResult, ReduceOptions } from "../types.js";
 
@@ -641,6 +642,21 @@ async function writeHookDebug(record: Record<string, unknown>): Promise<void> {
   await writeFile(historyPath, `${historyLines.join("\n")}\n`, "utf8");
 }
 
+function buildImmediateSkipStats(text: string): {
+  rawChars: number;
+  reducedChars: number;
+  savedChars: number;
+  ratio: number;
+} {
+  const rawChars = countTextChars(stripAnsi(text));
+  return {
+    rawChars,
+    reducedChars: rawChars,
+    savedChars: 0,
+    ratio: 1,
+  };
+}
+
 export async function runCodexPostToolUseHook(rawText: string): Promise<number> {
   let payload: CodexPostToolUsePayload;
   try {
@@ -673,6 +689,16 @@ export async function runCodexPostToolUseHook(rawText: string): Promise<number> 
   const combinedText = stringifyToolResponse(payload.tool_response);
   if (!combinedText.trim()) {
     await writeHookDebug({ ...debug, skipped: "empty-tool-response" });
+    return 0;
+  }
+
+  if (commandRequestsTokenjuiceRawBypass(command)) {
+    const stats = buildImmediateSkipStats(combinedText);
+    await writeHookDebug({
+      ...debug,
+      ...stats,
+      skipped: "explicit-raw-bypass",
+    });
     return 0;
   }
 

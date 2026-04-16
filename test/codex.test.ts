@@ -510,12 +510,22 @@ describe("runCodexPostToolUseHook", () => {
     const debug = JSON.parse(await readFile(join(home, "tokenjuice-hook.last.json"), "utf8")) as {
       rewrote: boolean;
       skipped?: string;
+      matchedReducer?: string;
+      rawChars?: number;
+      reducedChars?: number;
+      savedChars?: number;
+      ratio?: number;
     };
 
     expect(code).toBe(0);
     expect(output).toBe("");
     expect(debug.rewrote).toBe(false);
     expect(debug.skipped).toBe("explicit-raw-bypass");
+    expect(debug.matchedReducer).toBeUndefined();
+    expect(debug.rawChars).toBeGreaterThan(0);
+    expect(debug.reducedChars).toBe(debug.rawChars);
+    expect(debug.savedChars).toBe(0);
+    expect(debug.ratio).toBe(1);
   });
 
   it("writes rolling hook history entries alongside the last snapshot", async () => {
