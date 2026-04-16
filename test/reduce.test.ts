@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -318,6 +318,58 @@ describe("reduceExecution", () => {
 
     expect(result.classification.matchedReducer).toBe("tests/pnpm-test");
     expect(result.inlineText).toContain("exit 1");
+  });
+
+  it("supports rule-level onEmpty fallbacks after filtering", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "tokenjuice-on-empty-"));
+    tempDirs.push(cwd);
+    const rulesDir = join(cwd, ".tokenjuice", "rules", "custom");
+    await mkdir(rulesDir, { recursive: true });
+    await writeFile(
+      join(rulesDir, "empty-ok.json"),
+      JSON.stringify({
+        id: "custom/empty-ok",
+        family: "custom",
+        onEmpty: "custom: ok",
+        match: {
+          argv0: ["custom-tool"],
+        },
+        filters: {
+          skipPatterns: ["^noise$"],
+        },
+        transforms: {
+          trimEmptyEdges: true,
+        },
+      }, null, 2),
+      "utf8",
+    );
+
+    const result = await reduceExecution({
+      toolName: "exec",
+      command: "custom-tool check",
+      argv: ["custom-tool", "check"],
+      combinedText: "noise\nnoise\n",
+      exitCode: 0,
+    }, { cwd });
+
+    expect(result.classification.matchedReducer).toBe("custom/empty-ok");
+    expect(result.inlineText).toBe("custom: ok");
+  });
+
+  it("uses builtin onEmpty for notice-only npm install output", async () => {
+    const result = await reduceExecution({
+      toolName: "exec",
+      command: "npm install",
+      argv: ["npm", "install"],
+      combinedText: [
+        "npm notice New major version of npm available! 10.0.0 -> 10.1.0",
+        "npm notice Changelog: https://github.com/npm/cli/releases/tag/v10.1.0",
+      ].join("\n"),
+      exitCode: 0,
+    });
+
+    expect(result.classification.matchedReducer).toBe("install/npm-install");
+    expect(result.inlineText).toBe("npm install: ok");
   });
 
   it("does not prepend awkward pass counters for clean test output", async () => {

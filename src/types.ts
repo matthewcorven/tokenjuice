@@ -59,6 +59,7 @@ export type JsonRule = {
   family: string;
   description?: string;
   priority?: number;
+  onEmpty?: string;
   match: RuleMatch;
   filters?: RuleFilters;
   transforms?: RuleTransforms;

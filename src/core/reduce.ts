@@ -293,6 +293,13 @@ function applyRule(compiledRule: CompiledRule, input: ToolExecutionInput, rawTex
     facts[counter.name] = lines.filter((line) => pattern.test(line)).length;
   }
 
+  if (lines.length === 0 && rule.onEmpty) {
+    return {
+      summary: rule.onEmpty,
+      facts,
+    };
+  }
+
   const summarize = input.exitCode && input.exitCode !== 0 && rule.failure?.preserveOnFailure
     ? {
         head: rule.failure.head ?? 6,

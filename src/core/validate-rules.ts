@@ -145,6 +145,9 @@ export function validateRule(raw: unknown): ValidationResult {
   if ("description" in raw) {
     validateSafeString(raw.description, "description", errors, { allowEmpty: true });
   }
+  if ("onEmpty" in raw) {
+    validateSafeString(raw.onEmpty, "onEmpty", errors);
+  }
   if ("priority" in raw && (typeof raw.priority !== "number" || !Number.isFinite(raw.priority))) {
     errors.push("priority must be a finite number");
   }

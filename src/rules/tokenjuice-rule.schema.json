@@ -17,6 +17,10 @@
     "description": {
       "type": "string"
     },
+    "onEmpty": {
+      "type": "string",
+      "minLength": 1
+    },
     "priority": {
       "type": "number"
     },
