@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { doctorCodexHook, installCodexHook, runCodexPostToolUseHook } from "../src/index.js";
 
 const tempDirs: string[] = [];
+const PACKAGE_VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version as string;
 const originalPath = process.env.PATH;
 
 afterEach(async () => {
@@ -581,7 +583,7 @@ describe("runCodexPostToolUseHook", () => {
 
     expect(last.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(last.command).toBe("git status --short");
-    expect(last.tokenjuiceVersion).toBe("0.3.4");
+    expect(last.tokenjuiceVersion).toBe(PACKAGE_VERSION);
     expect(typeof last.hookCommandPath).toBe("string");
     expect(last.hookCommandPath).not.toBe("");
     expect(history).toHaveLength(2);
@@ -591,7 +593,7 @@ describe("runCodexPostToolUseHook", () => {
     ]);
     expect(history[0]?.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(history[0]?.skipped).toBe("inspection-command");
-    expect(history[0]?.tokenjuiceVersion).toBe("0.3.4");
+    expect(history[0]?.tokenjuiceVersion).toBe(PACKAGE_VERSION);
     expect(history[0]?.savedChars).toBe(0);
     expect(history[0]?.ratio).toBe(1);
     expect(history[0]?.matchedReducer).toBeUndefined();
