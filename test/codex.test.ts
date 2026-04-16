@@ -5,14 +5,16 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { doctorCodexHook, installCodexHook, runCodexPostToolUseHook } from "../src/index.js";
+import { doctorCodexHook, installCodexHook, listArtifactMetadata, runCodexPostToolUseHook } from "../src/index.js";
 
 const tempDirs: string[] = [];
 const PACKAGE_VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version as string;
+const originalHome = process.env.HOME;
 const originalPath = process.env.PATH;
 
 afterEach(async () => {
   delete process.env.CODEX_HOME;
+  process.env.HOME = originalHome;
   process.env.PATH = originalPath;
   await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
@@ -531,6 +533,39 @@ describe("runCodexPostToolUseHook", () => {
     expect(debug.reducedChars).toBe(debug.rawChars);
     expect(debug.savedChars).toBe(0);
     expect(debug.ratio).toBe(1);
+  });
+
+  it("records metadata-only stats for immediate skip paths", async () => {
+    const home = await createTempDir();
+    process.env.CODEX_HOME = home;
+    process.env.HOME = home;
+
+    const payload = JSON.stringify({
+      hook_event_name: "PostToolUse",
+      tool_name: "Bash",
+      tool_input: {
+        command: "tokenjuice wrap --raw -- printf 'ok\\n'",
+      },
+      tool_response: "ok\n",
+    });
+
+    const { code, output } = await captureStdout(() => runCodexPostToolUseHook(payload));
+    const debug = JSON.parse(await readFile(join(home, "tokenjuice-hook.last.json"), "utf8")) as {
+      rewrote: boolean;
+      skipped?: string;
+    };
+    const metadata = await listArtifactMetadata();
+
+    expect(code).toBe(0);
+    expect(output).toBe("");
+    expect(debug.rewrote).toBe(false);
+    expect(debug.skipped).toBe("explicit-raw-bypass");
+    expect(metadata).toHaveLength(1);
+    expect(metadata[0]?.metadata.command).toBe("tokenjuice wrap --raw -- printf 'ok\\n'");
+    expect(metadata[0]?.metadata.rawChars).toBeGreaterThan(0);
+    expect(metadata[0]?.metadata.reducedChars).toBe(metadata[0]?.metadata.rawChars);
+    expect(metadata[0]?.metadata.ratio).toBe(1);
+    expect(metadata[0]?.path).toBeUndefined();
   });
 
   it("writes rolling hook history entries alongside the last snapshot", async () => {

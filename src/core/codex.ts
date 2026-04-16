@@ -5,10 +5,11 @@ import { homedir } from "node:os";
 import packageJson from "../../package.json" with { type: "json" };
 
 import { isCompoundShellCommand, isRepositoryInspectionCommand } from "./command.js";
-import { reduceExecution } from "./reduce.js";
+import { classifyOnly, reduceExecution } from "./reduce.js";
+import { storeArtifactMetadata } from "./artifacts.js";
 import { countTextChars, stripAnsi } from "./text.js";
 
-import type { CompactResult, ReduceOptions } from "../types.js";
+import type { CompactResult, ReduceOptions, ToolExecutionInput } from "../types.js";
 
 type CodexHookCommand = {
   type: "command";
@@ -657,6 +658,31 @@ function buildImmediateSkipStats(text: string): {
   };
 }
 
+async function recordImmediateHookStats(
+  input: ToolExecutionInput,
+  rawText: string,
+  storeRaw: boolean,
+): Promise<void> {
+  if (storeRaw) {
+    return;
+  }
+
+  const stats = buildImmediateSkipStats(rawText);
+  const classification = await classifyOnly(input);
+  await storeArtifactMetadata(
+    {
+      input,
+      rawText,
+      classification,
+      stats: {
+        rawChars: stats.rawChars,
+        reducedChars: stats.reducedChars,
+        ratio: stats.ratio,
+      },
+    },
+  );
+}
+
 export async function runCodexPostToolUseHook(rawText: string): Promise<number> {
   let payload: CodexPostToolUsePayload;
   try {
@@ -692,7 +718,19 @@ export async function runCodexPostToolUseHook(rawText: string): Promise<number> 
     return 0;
   }
 
+  const executionInput: ToolExecutionInput = {
+    toolName: "exec",
+    command,
+    combinedText,
+    ...(typeof payload.cwd === "string" && payload.cwd.trim() ? { cwd: payload.cwd } : {}),
+    metadata: {
+      source: "codex-post-tool-use",
+    },
+  };
+  const storeRaw = shouldStoreFromEnv();
+
   if (commandRequestsTokenjuiceRawBypass(command)) {
+    await recordImmediateHookStats(executionInput, combinedText, storeRaw);
     const stats = buildImmediateSkipStats(combinedText);
     await writeHookDebug({
       ...debug,
@@ -703,6 +741,7 @@ export async function runCodexPostToolUseHook(rawText: string): Promise<number> 
   }
 
   if (isRepositoryInspectionCommand({ command })) {
+    await recordImmediateHookStats(executionInput, combinedText, storeRaw);
     const stats = buildImmediateSkipStats(combinedText);
     await writeHookDebug({
       ...debug,
@@ -717,20 +756,12 @@ export async function runCodexPostToolUseHook(rawText: string): Promise<number> 
     ...(typeof payload.cwd === "string" && payload.cwd.trim() ? { cwd: payload.cwd } : {}),
     ...(typeof maxInlineChars === "number" ? { maxInlineChars } : {}),
     recordStats: true,
-    ...(shouldStoreFromEnv() ? { store: true } : {}),
+    ...(storeRaw ? { store: true } : {}),
   };
 
   try {
     const result = await reduceExecution(
-      {
-        toolName: "exec",
-        command,
-        combinedText,
-        ...(typeof payload.cwd === "string" && payload.cwd.trim() ? { cwd: payload.cwd } : {}),
-        metadata: {
-          source: "codex-post-tool-use",
-        },
-      },
+      executionInput,
       options,
     );
 
