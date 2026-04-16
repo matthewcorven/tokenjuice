@@ -17,6 +17,15 @@ import {
 
 const tempDirs: string[] = [];
 
+function summarizeFailures(
+  results: Array<{ id: string; errors: string[] }>,
+): string {
+  return results
+    .filter((result) => result.errors.length > 0)
+    .map((result) => `${result.id}: ${result.errors.join(" | ")}`)
+    .join("\n");
+}
+
 afterEach(async () => {
   clearFixtureCache();
   clearRuleCache();
@@ -134,7 +143,11 @@ describe("rules", () => {
 
   it("verifies builtin rules cleanly", async () => {
     const results = await verifyBuiltinRules();
-    expect(results.every((result) => result.ok)).toBe(true);
+    const failed = results.filter((result) => !result.ok);
+    expect(
+      failed,
+      failed.length > 0 ? summarizeFailures(failed) : undefined,
+    ).toEqual([]);
   });
 
   it("loads builtin fixtures successfully", async () => {
@@ -144,7 +157,11 @@ describe("rules", () => {
 
   it("verifies builtin fixtures cleanly", async () => {
     const results = await verifyBuiltinFixtures();
-    expect(results.every((result) => result.ok)).toBe(true);
+    const failed = results.filter((result) => !result.ok);
+    expect(
+      failed,
+      failed.length > 0 ? summarizeFailures(failed) : undefined,
+    ).toEqual([]);
   });
 
   it("lets a project rule override a builtin by id", async () => {
