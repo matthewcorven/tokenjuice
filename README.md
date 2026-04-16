@@ -99,8 +99,8 @@ tokenjuice can install native host hooks for:
 
 | Logo | Client | Install | Hook file | Supported |
 | --- | --- | --- | --- | --- |
-| <img src="https://cdn.simpleicons.org/anthropic" alt="Claude Code" width="18" /> | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `tokenjuice install claude-code` | `~/.claude/settings.json` | ✅ Yes |
-| <img src="https://cdn.simpleicons.org/openai" alt="Codex CLI" width="18" /> | [Codex CLI](https://github.com/openai/codex) | `tokenjuice install codex` | `~/.codex/hooks.json` | ✅ Yes |
+| <img width="48px" src="https://raw.githubusercontent.com/junhoyeo/tokscale/main/.github/assets/client-claude.jpg" alt="Claude" /> | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `tokenjuice install claude-code` | `~/.claude/settings.json` | ✅ Yes |
+| <img width="48px" src="https://raw.githubusercontent.com/junhoyeo/tokscale/main/.github/assets/client-openai.jpg" alt="Codex" /> | [Codex CLI](https://github.com/openai/codex) | `tokenjuice install codex` | `~/.codex/hooks.json` | ✅ Yes |
 
 shared behavior:
 
