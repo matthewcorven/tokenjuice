@@ -156,6 +156,8 @@ supported host hooks:
 
 `tokenjuice doctor hooks` inspects installed host hooks together, spots stale Cellar-pinned Homebrew commands, and points back to the right install command for repair. the `--local` variant is for codex dev verification and expects that hook to point at the current repo build instead of the installed launcher on `PATH`.
 
+`tokenjuice uninstall codex` removes the tokenjuice Codex PostToolUse hook from `~/.codex/hooks.json`. once removed, `tokenjuice doctor codex` and `tokenjuice doctor hooks` report that state as `disabled` instead of treating it like a broken install.
+
 ## rule model
 
 tokenjuice uses JSON rules because they are easy to parse, easy to validate, and easy to inspect in tooling.

@@ -4,22 +4,30 @@ import { doctorCodexHook } from "./codex.js";
 import type { ClaudeCodeDoctorReport } from "./claude-code.js";
 import type { CodexDoctorReport, CodexHookCommandOptions } from "./codex.js";
 
+type HookHealthStatus = "ok" | "warn" | "broken" | "disabled";
+
 export type HookIntegrationDoctorReport = {
   codex: CodexDoctorReport;
   "claude-code": ClaudeCodeDoctorReport;
 };
 
 export type HookDoctorReport = {
-  status: "ok" | "warn" | "broken";
+  status: HookHealthStatus;
   integrations: HookIntegrationDoctorReport;
 };
 
-function mergeStatus(left: "ok" | "warn" | "broken", right: "ok" | "warn" | "broken"): "ok" | "warn" | "broken" {
+function mergeStatus(left: HookHealthStatus, right: HookHealthStatus): HookHealthStatus {
   if (left === "broken" || right === "broken") {
     return "broken";
   }
   if (left === "warn" || right === "warn") {
     return "warn";
+  }
+  if (left === "ok" || right === "ok") {
+    return "ok";
+  }
+  if (left === "disabled" || right === "disabled") {
+    return "disabled";
   }
   return "ok";
 }

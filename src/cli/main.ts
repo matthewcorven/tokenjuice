@@ -7,7 +7,7 @@ import packageJson from "../../package.json" with { type: "json" };
 import { getArtifact, listArtifactMetadata, listArtifacts } from "../core/artifacts.js";
 import { buildAnalysisEntry, discoverCandidates, doctorArtifacts, statsArtifacts } from "../core/analysis.js";
 import { doctorClaudeCodeHook, installClaudeCodeHook, runClaudeCodePostToolUseHook } from "../core/claude-code.js";
-import { doctorCodexHook, installCodexHook, runCodexPostToolUseHook } from "../core/codex.js";
+import { doctorCodexHook, installCodexHook, runCodexPostToolUseHook, uninstallCodexHook } from "../core/codex.js";
 import { doctorInstalledHooks } from "../core/hook-doctor.js";
 import { verifyBuiltinFixtures } from "../core/fixtures.js";
 import { parseReduceJsonRequest } from "../core/json-protocol.js";
@@ -55,6 +55,7 @@ function printUsage(): void {
       "  tokenjuice wrap [--raw|--full] -- <command> [args...] [--tee] [--store] [--max-capture-bytes <n>]",
       "  tokenjuice install codex [--local]",
       "  tokenjuice install claude-code",
+      "  tokenjuice uninstall codex",
       "  tokenjuice ls",
       "  tokenjuice cat <artifact-id>",
       "  tokenjuice verify [--fixtures]",
@@ -343,6 +344,27 @@ async function runInstall(args: ParsedArgs): Promise<number> {
     return 0;
   }
   throw new Error("install currently supports: codex, claude-code");
+}
+
+async function runUninstall(args: ParsedArgs): Promise<number> {
+  const target = args.positionals[0];
+  if (target === "codex") {
+    const result = await uninstallCodexHook();
+    if (args.format === "json") {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return 0;
+    }
+
+    process.stdout.write(`removed codex hook: ${result.hooksPath}\n`);
+    process.stdout.write(`removed entries: ${result.removed}\n`);
+    if (result.backupPath) {
+      process.stdout.write(`backup: ${result.backupPath}\n`);
+    }
+    process.stdout.write("enable: tokenjuice install codex\n");
+    return 0;
+  }
+
+  throw new Error("uninstall currently supports: codex");
 }
 
 async function runList(args: ParsedArgs): Promise<number> {
@@ -713,6 +735,8 @@ async function main(): Promise<number> {
       return await runWrap(args);
     case "install":
       return await runInstall(args);
+    case "uninstall":
+      return await runUninstall(args);
     case "ls":
       return await runList(args);
     case "cat":

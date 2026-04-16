@@ -365,6 +365,38 @@ describe("doctorInstalledHooks", () => {
     expect(report.integrations.codex.status).toBe("ok");
     expect(report.integrations["claude-code"].status).toBe("ok");
   });
+
+  it("treats a disabled Codex hook as disabled instead of warn", async () => {
+    const home = await createTempDir();
+    const binDir = join(home, "bin");
+    const launcherPath = join(binDir, "tokenjuice");
+
+    process.env.PATH = binDir;
+    process.env.CODEX_HOME = home;
+    process.env.CLAUDE_HOME = home;
+    await mkdir(binDir, { recursive: true });
+    await writeFile(launcherPath, "#!/usr/bin/env bash\nexit 0\n", { encoding: "utf8", mode: 0o755 });
+    await writeFile(
+      join(home, "hooks.json"),
+      `${JSON.stringify({
+        hooks: {
+          SessionStart: [
+            {
+              hooks: [{ type: "command", command: "echo session" }],
+            },
+          ],
+        },
+      }, null, 2)}\n`,
+      "utf8",
+    );
+    await installClaudeCodeHook(join(home, "settings.json"));
+
+    const report = await doctorInstalledHooks();
+
+    expect(report.status).toBe("ok");
+    expect(report.integrations.codex.status).toBe("disabled");
+    expect(report.integrations["claude-code"].status).toBe("ok");
+  });
 });
 
 describe("runClaudeCodePostToolUseHook", () => {

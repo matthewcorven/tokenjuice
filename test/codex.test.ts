@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { doctorCodexHook, installCodexHook, listArtifactMetadata, runCodexPostToolUseHook } from "../src/index.js";
+import { doctorCodexHook, installCodexHook, listArtifactMetadata, runCodexPostToolUseHook, uninstallCodexHook } from "../src/index.js";
 
 const tempDirs: string[] = [];
 const PACKAGE_VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version as string;
@@ -135,6 +135,47 @@ describe("installCodexHook", () => {
     expect(result.command).toBe(`${localNodePath} ${localCliPath} codex-post-tool-use`);
     expect(parsed.hooks.PostToolUse?.[0]?.hooks[0]?.command).toBe(`${localNodePath} ${localCliPath} codex-post-tool-use`);
   });
+
+  it("can uninstall the tokenjuice Codex hook without touching unrelated hooks", async () => {
+    const home = await createTempDir();
+    const hooksPath = join(home, "hooks.json");
+    process.env.PATH = "";
+    await writeFile(
+      hooksPath,
+      `${JSON.stringify({
+        hooks: {
+          SessionStart: [
+            {
+              hooks: [{ type: "command", command: "echo session" }],
+            },
+          ],
+          PostToolUse: [
+            {
+              matcher: "^Bash$",
+              hooks: [{ type: "command", command: "echo keep-me", statusMessage: "keep me" }],
+            },
+            {
+              matcher: "^Bash$",
+              hooks: [{ type: "command", command: "python3 /tmp/post_tool_use_tokenjuice.py", statusMessage: "compacting bash output with tokenjuice" }],
+            },
+          ],
+        },
+      }, null, 2)}\n`,
+      "utf8",
+    );
+
+    const result = await uninstallCodexHook(hooksPath);
+    const parsed = JSON.parse(await readFile(hooksPath, "utf8")) as {
+      hooks: Record<string, Array<{ matcher?: string; hooks: Array<{ command: string; statusMessage?: string }> }>>;
+    };
+
+    expect(result.hooksPath).toBe(hooksPath);
+    expect(result.backupPath).toBe(`${hooksPath}.bak`);
+    expect(result.removed).toBe(1);
+    expect(parsed.hooks.SessionStart).toHaveLength(1);
+    expect(parsed.hooks.PostToolUse).toHaveLength(1);
+    expect(parsed.hooks.PostToolUse?.[0]?.hooks[0]?.command).toBe("echo keep-me");
+  });
 });
 
 describe("doctorCodexHook", () => {
@@ -154,6 +195,32 @@ describe("doctorCodexHook", () => {
     expect(report.status).toBe("ok");
     expect(report.detectedCommand).toBe(`${launcherPath} codex-post-tool-use`);
     expect(report.issues).toEqual([]);
+  });
+
+  it("reports disabled when the tokenjuice Codex hook is not installed", async () => {
+    const home = await createTempDir();
+    const hooksPath = join(home, "hooks.json");
+    process.env.PATH = "";
+    await writeFile(
+      hooksPath,
+      `${JSON.stringify({
+        hooks: {
+          SessionStart: [
+            {
+              hooks: [{ type: "command", command: "echo session" }],
+            },
+          ],
+        },
+      }, null, 2)}\n`,
+      "utf8",
+    );
+
+    const report = await doctorCodexHook(hooksPath);
+
+    expect(report.status).toBe("disabled");
+    expect(report.detectedCommand).toBeUndefined();
+    expect(report.issues).toEqual([]);
+    expect(report.fixCommand).toBe("tokenjuice install codex");
   });
 
   it("flags stale Homebrew Cellar hook commands as broken", async () => {

@@ -58,13 +58,19 @@ export type CodexHookCommandOptions = {
 
 export type CodexDoctorReport = {
   hooksPath: string;
-  status: "ok" | "warn" | "broken";
+  status: "ok" | "warn" | "broken" | "disabled";
   issues: string[];
   fixCommand: string;
   expectedCommand: string;
   detectedCommand?: string;
   checkedPaths: string[];
   missingPaths: string[];
+};
+
+export type UninstallCodexHookResult = {
+  hooksPath: string;
+  backupPath?: string;
+  removed: number;
 };
 
 const TOKENJUICE_CODEX_STATUS = "compacting bash output with tokenjuice";
@@ -488,6 +494,32 @@ export async function installCodexHook(
   };
 }
 
+export async function uninstallCodexHook(
+  hooksPath = getDefaultHooksPath(),
+): Promise<UninstallCodexHookResult> {
+  const { config, backupPath } = await loadHooksConfig(hooksPath);
+  const postToolUse = config.hooks.PostToolUse ?? [];
+  const retained = postToolUse.filter((group) => !isTokenjuiceCodexHook(group));
+  const removed = postToolUse.length - retained.length;
+
+  if (retained.length > 0) {
+    config.hooks.PostToolUse = retained;
+  } else {
+    delete config.hooks.PostToolUse;
+  }
+
+  await mkdir(dirname(hooksPath), { recursive: true });
+  const tempPath = `${hooksPath}.tmp`;
+  await writeFile(tempPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  await rename(tempPath, hooksPath);
+
+  return {
+    hooksPath,
+    ...(backupPath ? { backupPath } : {}),
+    removed,
+  };
+}
+
 export async function doctorCodexHook(
   hooksPath = getDefaultHooksPath(),
   options: CodexHookCommandOptions = {},
@@ -500,8 +532,8 @@ export async function doctorCodexHook(
   if (!exists) {
     return {
       hooksPath,
-      status: "warn",
-      issues: ["codex hooks.json is missing"],
+      status: "disabled",
+      issues: [],
       fixCommand,
       expectedCommand,
       checkedPaths: [],
@@ -512,8 +544,8 @@ export async function doctorCodexHook(
   if (!detectedCommand) {
     return {
       hooksPath,
-      status: "warn",
-      issues: ["tokenjuice PostToolUse hook is not installed for Codex"],
+      status: "disabled",
+      issues: [],
       fixCommand,
       expectedCommand,
       checkedPaths: [],

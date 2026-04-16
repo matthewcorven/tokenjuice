@@ -38,6 +38,7 @@ tokenjuice --help
 tokenjuice --version
 tokenjuice install codex
 tokenjuice install claude-code
+tokenjuice uninstall codex
 ```
 
 ## why
@@ -68,6 +69,7 @@ tokenjuice wrap --store -- <command> [args...]
 tokenjuice install codex
 tokenjuice install codex --local
 tokenjuice install claude-code
+tokenjuice uninstall codex
 tokenjuice ls
 tokenjuice cat <artifact-id>
 tokenjuice verify
@@ -108,6 +110,7 @@ shared behavior:
 - tokenjuice only rewrites the output that goes back through the hook
 - raw command execution logs are still raw
 - `tokenjuice doctor hooks` checks installed host hooks together instead of making you guess which integration drifted
+- `tokenjuice uninstall codex` cleanly removes the Codex hook and `tokenjuice doctor hooks` reports that as `disabled`, not broken
 - `tokenjuice install codex --local` / `tokenjuice doctor hooks --local` are for testing the current repo build before release
 - Claude Code preserves unrelated settings keys while updating `hooks.PostToolUse`
 
