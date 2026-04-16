@@ -2,6 +2,12 @@
   "id": "install/yarn-install",
   "family": "dependency-install",
   "description": "Compact yarn install output while preserving warnings and summary lines.",
+  "matchOutput": [
+    {
+      "pattern": "Already up-to-date\\.",
+      "message": "yarn install: up to date"
+    }
+  ],
   "match": {
     "toolNames": ["exec"],
     "argv0": ["yarn"],

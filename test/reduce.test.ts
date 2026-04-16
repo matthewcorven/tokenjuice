@@ -428,6 +428,40 @@ describe("reduceExecution", () => {
     expect(result.inlineText).toBe("npm install: up to date");
   });
 
+  it.each([
+    {
+      label: "pnpm up to date",
+      command: "pnpm install",
+      argv: ["pnpm", "install"],
+      combinedText: "Lockfile is up to date, resolution step is skipped\nAlready up to date\nDone in 612ms\n",
+      expected: "pnpm install: up to date",
+    },
+    {
+      label: "yarn up to date",
+      command: "yarn install",
+      argv: ["yarn", "install"],
+      combinedText: "[1/4] Resolving packages...\nsuccess Already up-to-date.\nDone in 0.42s.\n",
+      expected: "yarn install: up to date",
+    },
+    {
+      label: "bun up to date",
+      command: "bun install",
+      argv: ["bun", "install"],
+      combinedText: "bun install v1.1.0\nChecked 43 installs across 71 packages (no changes)\n",
+      expected: "bun install: up to date",
+    },
+  ])("uses builtin $label matchOutput", async ({ command, argv, combinedText, expected }) => {
+    const result = await reduceExecution({
+      toolName: "exec",
+      command,
+      argv,
+      combinedText,
+      exitCode: 0,
+    });
+
+    expect(result.inlineText).toBe(expected);
+  });
+
   it("does not prepend awkward pass counters for clean test output", async () => {
     const result = await reduceExecution({
       toolName: "exec",

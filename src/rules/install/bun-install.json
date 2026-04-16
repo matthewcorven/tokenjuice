@@ -2,6 +2,13 @@
   "id": "install/bun-install",
   "family": "dependency-install",
   "description": "Compact bun install output while preserving warnings and package counts.",
+  "matchOutput": [
+    {
+      "pattern": "Checked \\d+ installs? across \\d+ packages? \\(no changes\\)",
+      "message": "bun install: up to date",
+      "flags": "i"
+    }
+  ],
   "match": {
     "toolNames": ["exec"],
     "argv0": ["bun"],
