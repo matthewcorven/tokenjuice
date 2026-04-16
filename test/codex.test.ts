@@ -103,6 +103,34 @@ describe("installCodexHook", () => {
     expect(result.command).toBe(`${launcherPath} codex-post-tool-use`);
     expect(parsed.hooks.PostToolUse?.[0]?.hooks[0]?.command).toBe(`${launcherPath} codex-post-tool-use`);
   });
+
+  it("can install a local codex hook without preferring PATH", async () => {
+    const home = await createTempDir();
+    const hooksPath = join(home, "hooks.json");
+    const binDir = join(home, "bin");
+    const launcherPath = join(binDir, "tokenjuice");
+    const localNodePath = join(home, "node");
+    const localCliPath = join(home, "dist", "cli", "main.js");
+
+    process.env.PATH = binDir;
+    await mkdir(binDir, { recursive: true });
+    await mkdir(join(home, "dist", "cli"), { recursive: true });
+    await writeFile(launcherPath, "#!/usr/bin/env bash\nexit 0\n", { encoding: "utf8", mode: 0o755 });
+    await writeFile(localNodePath, "#!/usr/bin/env bash\nexit 0\n", { encoding: "utf8", mode: 0o755 });
+    await writeFile(localCliPath, "console.log('tokenjuice');\n", "utf8");
+
+    const result = await installCodexHook(hooksPath, {
+      local: true,
+      binaryPath: localCliPath,
+      nodePath: localNodePath,
+    });
+    const parsed = JSON.parse(await readFile(hooksPath, "utf8")) as {
+      hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>>;
+    };
+
+    expect(result.command).toBe(`${localNodePath} ${localCliPath} codex-post-tool-use`);
+    expect(parsed.hooks.PostToolUse?.[0]?.hooks[0]?.command).toBe(`${localNodePath} ${localCliPath} codex-post-tool-use`);
+  });
 });
 
 describe("doctorCodexHook", () => {
@@ -156,6 +184,39 @@ describe("doctorCodexHook", () => {
     expect(report.issues).toContain("configured Codex hook is pinned to a versioned Homebrew Cellar path");
     expect(report.missingPaths).toContain("/opt/homebrew/Cellar/tokenjuice/0.2.0/libexec/dist/cli/main.js");
     expect(report.fixCommand).toBe("tokenjuice install codex");
+  });
+
+  it("reports a healthy local codex hook when asked to check local mode", async () => {
+    const home = await createTempDir();
+    const hooksPath = join(home, "hooks.json");
+    const binDir = join(home, "bin");
+    const launcherPath = join(binDir, "tokenjuice");
+    const localNodePath = join(home, "node");
+    const localCliPath = join(home, "dist", "cli", "main.js");
+
+    process.env.PATH = binDir;
+    await mkdir(binDir, { recursive: true });
+    await mkdir(join(home, "dist", "cli"), { recursive: true });
+    await writeFile(launcherPath, "#!/usr/bin/env bash\nexit 0\n", { encoding: "utf8", mode: 0o755 });
+    await writeFile(localNodePath, "#!/usr/bin/env bash\nexit 0\n", { encoding: "utf8", mode: 0o755 });
+    await writeFile(localCliPath, "console.log('tokenjuice');\n", "utf8");
+
+    await installCodexHook(hooksPath, {
+      local: true,
+      binaryPath: localCliPath,
+      nodePath: localNodePath,
+    });
+
+    const report = await doctorCodexHook(hooksPath, {
+      local: true,
+      binaryPath: localCliPath,
+      nodePath: localNodePath,
+    });
+
+    expect(report.status).toBe("ok");
+    expect(report.detectedCommand).toBe(`${localNodePath} ${localCliPath} codex-post-tool-use`);
+    expect(report.fixCommand).toBe("tokenjuice install codex --local");
+    expect(report.issues).toEqual([]);
   });
 });
 
@@ -265,5 +326,36 @@ describe("runCodexPostToolUseHook", () => {
     expect(debug.rewrote).toBe(false);
     expect(debug.skipped).toBe("generic-weak-compaction");
     expect(debug.matchedReducer).toBe("generic/fallback");
+  });
+
+  it("honors tokenjuice raw bypass commands without re-compacting them", async () => {
+    const home = await createTempDir();
+    process.env.CODEX_HOME = home;
+
+    const payload = JSON.stringify({
+      hook_event_name: "PostToolUse",
+      tool_name: "Bash",
+      tool_input: {
+        command: "tokenjuice wrap --raw -- bash -lc 'git show HEAD --stat'",
+      },
+      tool_response: [
+        "commit abcdef",
+        "Author: Example",
+        "",
+        " README.md | 10 +++++-----",
+        " src/core/codex.ts | 12 +++++++-----",
+      ].join("\n"),
+    });
+
+    const { code, output } = await captureStdout(() => runCodexPostToolUseHook(payload));
+    const debug = JSON.parse(await readFile(join(home, "tokenjuice-hook.last.json"), "utf8")) as {
+      rewrote: boolean;
+      skipped?: string;
+    };
+
+    expect(code).toBe(0);
+    expect(output).toBe("");
+    expect(debug.rewrote).toBe(false);
+    expect(debug.skipped).toBe("explicit-raw-bypass");
   });
 });

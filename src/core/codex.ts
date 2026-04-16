@@ -1,6 +1,6 @@
 import { constants as fsConstants } from "node:fs";
 import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { delimiter, dirname, join } from "node:path";
+import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
 
 import { isCompoundShellCommand } from "./command.js";
@@ -41,6 +41,12 @@ export type InstallCodexHookResult = {
   hooksPath: string;
   backupPath?: string;
   command: string;
+};
+
+export type CodexHookCommandOptions = {
+  local?: boolean;
+  binaryPath?: string;
+  nodePath?: string;
 };
 
 export type CodexDoctorReport = {
@@ -107,14 +113,19 @@ async function resolveInstalledTokenjuicePath(): Promise<string | undefined> {
   return undefined;
 }
 
-async function buildCodexHookCommand(binaryPath = process.argv[1], nodePath = process.execPath): Promise<string> {
+async function buildCodexHookCommand(options: CodexHookCommandOptions = {}): Promise<string> {
+  const rawBinaryPath = options.binaryPath ?? process.argv[1];
+  const binaryPath = rawBinaryPath && !isAbsolute(rawBinaryPath) ? resolve(rawBinaryPath) : rawBinaryPath;
+  const nodePath = options.nodePath ?? process.execPath;
   if (!binaryPath) {
     throw new Error("unable to resolve tokenjuice binary path for codex install");
   }
 
-  const installedBinaryPath = await resolveInstalledTokenjuicePath();
-  if (installedBinaryPath) {
-    return `${shellQuote(installedBinaryPath)} codex-post-tool-use`;
+  if (!options.local) {
+    const installedBinaryPath = await resolveInstalledTokenjuicePath();
+    if (installedBinaryPath) {
+      return `${shellQuote(installedBinaryPath)} codex-post-tool-use`;
+    }
   }
 
   if (binaryPath.endsWith(".js")) {
@@ -122,6 +133,19 @@ async function buildCodexHookCommand(binaryPath = process.argv[1], nodePath = pr
   }
 
   return `${shellQuote(binaryPath)} codex-post-tool-use`;
+}
+
+function getCodexFixCommand(local = false): string {
+  return local ? "tokenjuice install codex --local" : TOKENJUICE_CODEX_FIX_COMMAND;
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -353,6 +377,36 @@ function extractHookCommandPaths(command: string): string[] {
   return [...paths];
 }
 
+function commandRequestsTokenjuiceRawBypass(command: string): boolean {
+  const argv = parseShellWords(command);
+  if (argv.length < 3) {
+    return false;
+  }
+
+  const first = argv[0];
+  const second = argv[1];
+  let wrapIndex = -1;
+  if (first === "tokenjuice") {
+    wrapIndex = 1;
+  } else if (
+    typeof first === "string"
+    && first.endsWith("/node")
+    && typeof second === "string"
+    && second.endsWith(".js")
+    && argv.slice(1).some((part) => part.includes("tokenjuice"))
+  ) {
+    wrapIndex = 2;
+  }
+
+  if (wrapIndex === -1 || argv[wrapIndex] !== "wrap") {
+    return false;
+  }
+
+  const optionEndIndex = argv.indexOf("--", wrapIndex + 1);
+  const optionArgs = argv.slice(wrapIndex + 1, optionEndIndex === -1 ? undefined : optionEndIndex);
+  return optionArgs.includes("--raw") || optionArgs.includes("--full");
+}
+
 function buildCodexHint(rawRefId?: string): string {
   const hints = [
     "if this compaction looks wrong, rerun with `tokenjuice wrap --raw -- <command>`.",
@@ -364,9 +418,12 @@ function buildCodexHint(rawRefId?: string): string {
   return hints.join(" ");
 }
 
-export async function installCodexHook(hooksPath = getDefaultHooksPath()): Promise<InstallCodexHookResult> {
+export async function installCodexHook(
+  hooksPath = getDefaultHooksPath(),
+  options: CodexHookCommandOptions = {},
+): Promise<InstallCodexHookResult> {
   const { config, backupPath } = await loadHooksConfig(hooksPath);
-  const command = await buildCodexHookCommand();
+  const command = await buildCodexHookCommand(options);
   const postToolUse = config.hooks.PostToolUse ?? [];
   const retained = postToolUse.filter((group) => !isTokenjuiceCodexHook(group));
   retained.push(createTokenjuiceCodexHook(command));
@@ -384,8 +441,12 @@ export async function installCodexHook(hooksPath = getDefaultHooksPath()): Promi
   };
 }
 
-export async function doctorCodexHook(hooksPath = getDefaultHooksPath()): Promise<CodexDoctorReport> {
-  const expectedCommand = await buildCodexHookCommand();
+export async function doctorCodexHook(
+  hooksPath = getDefaultHooksPath(),
+  options: CodexHookCommandOptions = {},
+): Promise<CodexDoctorReport> {
+  const expectedCommand = await buildCodexHookCommand(options);
+  const fixCommand = getCodexFixCommand(options.local);
   const { config, exists } = await readHooksConfig(hooksPath);
   const detectedCommand = findTokenjuiceCodexHookCommand(config);
 
@@ -394,7 +455,7 @@ export async function doctorCodexHook(hooksPath = getDefaultHooksPath()): Promis
       hooksPath,
       status: "warn",
       issues: ["codex hooks.json is missing"],
-      fixCommand: TOKENJUICE_CODEX_FIX_COMMAND,
+      fixCommand,
       expectedCommand,
       checkedPaths: [],
       missingPaths: [],
@@ -406,7 +467,7 @@ export async function doctorCodexHook(hooksPath = getDefaultHooksPath()): Promis
       hooksPath,
       status: "warn",
       issues: ["tokenjuice PostToolUse hook is not installed for Codex"],
-      fixCommand: TOKENJUICE_CODEX_FIX_COMMAND,
+      fixCommand,
       expectedCommand,
       checkedPaths: [],
       missingPaths: [],
@@ -416,7 +477,7 @@ export async function doctorCodexHook(hooksPath = getDefaultHooksPath()): Promis
   const checkedPaths = extractHookCommandPaths(detectedCommand);
   const missingPaths: string[] = [];
   for (const path of checkedPaths) {
-    if (!(await isExecutableFile(path)) && !(path.endsWith(".js") && await access(path).then(() => true).catch(() => false))) {
+    if (!(await isExecutableFile(path)) && !(path.endsWith(".js") && await pathExists(path))) {
       missingPaths.push(path);
     }
   }
@@ -437,7 +498,7 @@ export async function doctorCodexHook(hooksPath = getDefaultHooksPath()): Promis
     hooksPath,
     status: missingPaths.length > 0 ? "broken" : issues.length > 0 ? "warn" : "ok",
     issues,
-    fixCommand: TOKENJUICE_CODEX_FIX_COMMAND,
+    fixCommand,
     expectedCommand,
     detectedCommand,
     checkedPaths,
@@ -460,6 +521,10 @@ function shouldStoreFromEnv(): boolean {
 }
 
 function getCodexRewriteSkipReason(command: string, combinedText: string, result: CompactResult): string | null {
+  if (commandRequestsTokenjuiceRawBypass(command)) {
+    return "explicit-raw-bypass";
+  }
+
   const inlineText = result.inlineText.trim();
   const rawText = combinedText.trim();
   const rawChars = result.stats.rawChars;

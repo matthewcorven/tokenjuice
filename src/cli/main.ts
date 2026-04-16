@@ -18,6 +18,7 @@ type Format = "text" | "json";
 type ParsedArgs = {
   command: string | undefined;
   format: Format;
+  local: boolean;
   classifier: string | undefined;
   fixtures: boolean;
   sourceCommand: string | undefined;
@@ -50,12 +51,12 @@ function printUsage(): void {
       "  tokenjuice reduce [file] [--format text|json] [--classifier <id>] [--store] [--raw|--full]",
       "  tokenjuice reduce-json [file]",
       "  tokenjuice wrap [--raw|--full] -- <command> [args...] [--tee] [--store] [--max-capture-bytes <n>]",
-      "  tokenjuice install codex",
+      "  tokenjuice install codex [--local]",
       "  tokenjuice ls",
       "  tokenjuice cat <artifact-id>",
       "  tokenjuice verify [--fixtures]",
       "  tokenjuice discover [file] [--source-command <cmd>] [--tool-name <name>] [--exit-code <n>]",
-      "  tokenjuice doctor [file|codex] [--source-command <cmd>] [--tool-name <name>] [--exit-code <n>]",
+      "  tokenjuice doctor [file|codex] [--local] [--source-command <cmd>] [--tool-name <name>] [--exit-code <n>]",
       "  tokenjuice stats",
     ].join("\n"),
   );
@@ -67,6 +68,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   const positionals: string[] = [];
   const passthrough: string[] = [];
   let format: Format = "text";
+  let local = false;
   let classifier: string | undefined;
   let fixtures = false;
   let sourceCommand: string | undefined;
@@ -109,6 +111,10 @@ function parseArgs(argv: string[]): ParsedArgs {
         }
         classifier = next;
         index += 2;
+        break;
+      case "--local":
+        local = true;
+        index += 1;
         break;
       case "--fixtures":
         fixtures = true;
@@ -184,6 +190,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return {
     command,
     format,
+    local,
     classifier,
     fixtures,
     sourceCommand,
@@ -301,7 +308,7 @@ async function runInstall(args: ParsedArgs): Promise<number> {
     throw new Error("install currently supports only: codex");
   }
 
-  const result = await installCodexHook();
+  const result = await installCodexHook(undefined, { local: args.local });
   if (args.format === "json") {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return 0;
@@ -312,7 +319,7 @@ async function runInstall(args: ParsedArgs): Promise<number> {
   if (result.backupPath) {
     process.stdout.write(`backup: ${result.backupPath}\n`);
   }
-  process.stdout.write("doctor: tokenjuice doctor codex\n");
+  process.stdout.write(`doctor: tokenjuice doctor codex${args.local ? " --local" : ""}\n`);
   process.stdout.write("escape hatch: tokenjuice wrap --raw -- <command>\n");
   return 0;
 }
@@ -468,7 +475,7 @@ async function runDiscover(args: ParsedArgs): Promise<number> {
 
 async function runDoctor(args: ParsedArgs): Promise<number> {
   if (args.positionals[0] === "codex") {
-    const report = await doctorCodexHook();
+    const report = await doctorCodexHook(undefined, { local: args.local });
 
     if (args.format === "json") {
       process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);

@@ -65,6 +65,7 @@ tokenjuice wrap -- <command> [args...]
 tokenjuice wrap --raw -- <command> [args...]
 tokenjuice wrap --store -- <command> [args...]
 tokenjuice install codex
+tokenjuice install codex --local
 tokenjuice ls
 tokenjuice cat <artifact-id>
 tokenjuice verify
@@ -101,12 +102,22 @@ tokenjuice doctor codex
 
 that writes a `PostToolUse` hook into `~/.codex/hooks.json` so codex can compact noisy `Bash` output after the command runs.
 
+for local repo verification, use:
+
+```bash
+tokenjuice install codex --local
+tokenjuice doctor codex --local
+```
+
+that pins the hook to the current repo build instead of the installed launcher on `PATH`.
+
 important detail:
 
 - the original shell command still runs untouched
 - tokenjuice only rewrites the output that goes back through the hook
 - raw command execution logs are still raw
 - `tokenjuice doctor codex` checks whether the hook command is missing or pinned to a stale Homebrew Cellar path
+- `tokenjuice install codex --local` / `tokenjuice doctor codex --local` are for testing the current repo build before release
 
 library-side adapters can also use `runReduceJsonCli(...)` to call the CLI without rebuilding the child-process + JSON plumbing themselves.
 
