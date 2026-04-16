@@ -139,7 +139,7 @@ describe("rules", () => {
 
   it("loads builtin fixtures successfully", async () => {
     const fixtures = await loadBuiltinFixtures();
-    expect(fixtures).toHaveLength(96);
+    expect(fixtures).toHaveLength(100);
   });
 
   it("verifies builtin fixtures cleanly", async () => {
