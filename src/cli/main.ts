@@ -6,6 +6,7 @@ import packageJson from "../../package.json" with { type: "json" };
 
 import { getArtifact, listArtifactMetadata, listArtifacts } from "../core/artifacts.js";
 import { buildAnalysisEntry, discoverCandidates, doctorArtifacts, statsArtifacts } from "../core/analysis.js";
+import { installCodexHook, runCodexPostToolUseHook } from "../core/codex.js";
 import { verifyBuiltinFixtures } from "../core/fixtures.js";
 import { parseReduceJsonRequest } from "../core/json-protocol.js";
 import { reduceExecution } from "../core/reduce.js";
@@ -48,6 +49,7 @@ function printUsage(): void {
       "  tokenjuice reduce [file] [--format text|json] [--classifier <id>] [--store]",
       "  tokenjuice reduce-json [file]",
       "  tokenjuice wrap -- <command> [args...] [--tee] [--store] [--max-capture-bytes <n>]",
+      "  tokenjuice install codex",
       "  tokenjuice ls",
       "  tokenjuice cat <artifact-id>",
       "  tokenjuice verify [--fixtures]",
@@ -280,6 +282,26 @@ async function runWrap(args: ParsedArgs): Promise<number> {
   });
   emit(args.format, wrapped, wrapped.result.inlineText);
   return wrapped.exitCode;
+}
+
+async function runInstall(args: ParsedArgs): Promise<number> {
+  const target = args.positionals[0];
+  if (target !== "codex") {
+    throw new Error("install currently supports only: codex");
+  }
+
+  const result = await installCodexHook();
+  if (args.format === "json") {
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return 0;
+  }
+
+  process.stdout.write(`installed codex hook: ${result.hooksPath}\n`);
+  process.stdout.write(`command: ${result.command}\n`);
+  if (result.backupPath) {
+    process.stdout.write(`backup: ${result.backupPath}\n`);
+  }
+  return 0;
 }
 
 async function runList(args: ParsedArgs): Promise<number> {
@@ -546,6 +568,8 @@ async function main(): Promise<number> {
       return await runReduceJson(args);
     case "wrap":
       return await runWrap(args);
+    case "install":
+      return await runInstall(args);
     case "ls":
       return await runList(args);
     case "cat":
@@ -558,6 +582,8 @@ async function main(): Promise<number> {
       return await runDoctor(args);
     case "stats":
       return await runStats(args);
+    case "codex-post-tool-use":
+      return await runCodexPostToolUseHook(await readStdin(args.maxInputBytes));
     default:
       printUsage();
       return 1;

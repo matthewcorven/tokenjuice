@@ -134,6 +134,16 @@ tokenjuice stats
 tokenjuice stats --format json
 ```
 
+### install
+
+install host wiring when tokenjuice can own it directly:
+
+```bash
+tokenjuice install codex
+```
+
+for codex, this writes a home-level `PostToolUse` hook into `~/.codex/hooks.json` so tokenjuice can compact `Bash` output after execution without changing the executed command.
+
 ## rule model
 
 tokenjuice uses JSON rules because they are easy to parse, easy to validate, and easy to inspect in tooling.

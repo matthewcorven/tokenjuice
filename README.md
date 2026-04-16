@@ -35,6 +35,7 @@ then:
 ```bash
 tokenjuice --help
 tokenjuice --version
+tokenjuice install codex
 ```
 
 ## why
@@ -61,6 +62,7 @@ tokenjuice reduce [file]
 tokenjuice reduce-json [file]
 tokenjuice wrap -- <command> [args...]
 tokenjuice wrap --store -- <command> [args...]
+tokenjuice install codex
 tokenjuice ls
 tokenjuice cat <artifact-id>
 tokenjuice verify
@@ -84,6 +86,22 @@ direct payload:
   "exitCode": 1
 }
 ```
+
+## codex
+
+for codex, the clean path is a home hook:
+
+```bash
+tokenjuice install codex
+```
+
+that writes a `PostToolUse` hook into `~/.codex/hooks.json` so codex can compact noisy `Bash` output after the command runs.
+
+important detail:
+
+- the original shell command still runs untouched
+- tokenjuice only rewrites the output that goes back through the hook
+- raw command execution logs are still raw
 
 library-side adapters can also use `runReduceJsonCli(...)` to call the CLI without rebuilding the child-process + JSON plumbing themselves.
 
