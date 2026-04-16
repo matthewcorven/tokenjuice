@@ -1,5 +1,6 @@
 import { loadRules } from "./rules.js";
 import { classifyExecution, matchesRule } from "./classify.js";
+import { normalizeExecutionInput } from "./command.js";
 import { clampText, clampTextMiddle, countTextChars, dedupeAdjacent, headTail, normalizeLines, pluralize, stripAnsi, trimEmptyEdges } from "./text.js";
 import { storeArtifact } from "./artifacts.js";
 
@@ -229,8 +230,9 @@ export async function reduceExecutionWithRules(
   rules: CompiledRule[],
   opts: ReduceOptions = {},
 ): Promise<CompactResult> {
-  const classification = classifyExecution(input, rules, opts.classifier);
-  const rawText = buildRawText(input);
+  const normalizedInput = normalizeExecutionInput(input);
+  const classification = classifyExecution(normalizedInput, rules, opts.classifier);
+  const rawText = buildRawText(normalizedInput);
   const measuredRawChars = countTextChars(stripAnsi(rawText));
   const matchedRule = rules.find((rule) => rule.rule.id === classification.matchedReducer)
     ?? rules.find((rule) => rule.rule.id === "generic/fallback");
@@ -239,10 +241,10 @@ export async function reduceExecutionWithRules(
     throw new Error("missing generic fallback rule");
   }
 
-  const { summary, facts } = applyRule(matchedRule, input, rawText);
-  const compactText = formatInline(input, summary || "(no output)", facts);
+  const { summary, facts } = applyRule(matchedRule, normalizedInput, rawText);
+  const compactText = formatInline(normalizedInput, summary || "(no output)", facts);
   const maxInlineChars = opts.maxInlineChars ?? 1200;
-  const selectedText = selectInlineText(classification, input, rawText, compactText, maxInlineChars);
+  const selectedText = selectInlineText(classification, normalizedInput, rawText, compactText, maxInlineChars);
   const clamp = classification.family === "help" || selectedText.includes("\n") ? clampTextMiddle : clampText;
   const provisionalInlineText = clamp(selectedText, maxInlineChars);
   const provisionalReducedChars = countTextChars(provisionalInlineText);
@@ -254,7 +256,7 @@ export async function reduceExecutionWithRules(
   const rawRef = opts.store
     ? await storeArtifact(
         {
-          input,
+          input: normalizedInput,
           rawText,
           classification,
           stats: {
@@ -286,10 +288,11 @@ export async function reduceExecutionWithRules(
 
 export async function classifyOnly(input: ToolExecutionInput, forcedRuleId?: string) {
   const rules = await loadRules();
-  return classifyExecution(input, rules, forcedRuleId);
+  return classifyExecution(normalizeExecutionInput(input), rules, forcedRuleId);
 }
 
 export async function findMatchingRule(input: ToolExecutionInput): Promise<CompiledRule | undefined> {
   const rules = await loadRules();
-  return rules.find((rule) => matchesRule(rule, input));
+  const normalizedInput = normalizeExecutionInput(input);
+  return rules.find((rule) => matchesRule(rule, normalizedInput));
 }

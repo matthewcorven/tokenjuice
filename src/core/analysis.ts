@@ -1,6 +1,5 @@
-import { basename } from "node:path";
-
 import type { CompactResult, StoredArtifactMetadata, ToolExecutionInput } from "../types.js";
+import { normalizeCommandSignature } from "./command.js";
 
 export type AnalysisEntry = {
   metadata: StoredArtifactMetadata;
@@ -97,29 +96,6 @@ function effectiveRatio(metadata: StoredArtifactMetadata): number | null {
     return 1;
   }
   return clampRatio(effectiveReducedChars(metadata) / metadata.rawChars);
-}
-
-function tokenize(command: string): string[] {
-  return command.trim().split(/\s+/u).filter(Boolean);
-}
-
-export function normalizeCommandSignature(command?: string): string | null {
-  if (!command || command === "stdin" || command.startsWith("reduce:")) {
-    return null;
-  }
-
-  const tokens = tokenize(command);
-  if (tokens.length === 0) {
-    return null;
-  }
-
-  const first = tokens[0];
-  if (!first) {
-    return null;
-  }
-
-  const normalized = basename(first.replace(/^["']|["']$/gu, ""));
-  return normalized || null;
 }
 
 export function buildAnalysisEntry(input: ToolExecutionInput, result: CompactResult): AnalysisEntry {

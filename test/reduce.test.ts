@@ -44,6 +44,30 @@ describe("reduceExecution", () => {
     expect(result.inlineText).toContain("??: new-file.ts");
   });
 
+  it("derives argv from the command string when callers only pass command", async () => {
+    const result = await reduceExecution({
+      toolName: "exec",
+      command: "git status",
+      combinedText: [
+        "On branch pr-65478-security-fix",
+        "Your branch and 'origin/pr-65478-security-fix' have diverged,",
+        "and have 8 and 642 different commits each, respectively.",
+        "",
+        "Changes not staged for commit:",
+        "  modified:   src/agents/pi-embedded-runner/run/attempt.prompt-helpers.ts",
+        "  modified:   src/agents/pi-embedded-runner/run/attempt.test.ts",
+        "",
+        "no changes added to commit",
+      ].join("\n"),
+      exitCode: 0,
+    });
+
+    expect(result.classification.matchedReducer).toBe("git/status");
+    expect(result.inlineText).toContain("Changes not staged:");
+    expect(result.inlineText).toContain("M: src/agents/pi-embedded-runner/run/attempt.prompt-helpers.ts");
+    expect(result.inlineText).not.toContain("and have 8 and 642");
+  });
+
   it("counts short git status entries correctly", async () => {
     const result = await reduceExecution({
       toolName: "exec",
@@ -150,7 +174,7 @@ describe("reduceExecution", () => {
   it("falls back cleanly for generic output", async () => {
     const result = await reduceExecution({
       toolName: "exec",
-      command: "pnpm test",
+      command: "custom-tool check",
       combinedText: Array.from({ length: 30 }, (_, index) => `line ${index + 1}`).join("\n"),
       exitCode: 0,
     });
