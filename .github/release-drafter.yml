@@ -111,10 +111,6 @@ autolabeler:
   - label: "dependencies"
     title:
       - '/^dependencies(\(.+\))?:/i'
-  - label: "other"
-    title:
-      - '/.*/'
-
 template: |
   ## tokenjuice v$RESOLVED_VERSION
 
