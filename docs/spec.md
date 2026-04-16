@@ -147,10 +147,14 @@ tokenjuice install codex --local
 tokenjuice doctor hooks --local
 ```
 
-for codex, this writes a home-level `PostToolUse` hook into `~/.codex/hooks.json` so tokenjuice can compact `Bash` output after execution without changing the executed command.
+supported host hooks:
+
+| Client | Install | Hook file | Notes |
+| --- | --- | --- | --- |
+| Claude Code | `tokenjuice install claude-code` | `~/.claude/settings.json` | Preserves unrelated settings keys while updating `hooks.PostToolUse` |
+| Codex CLI | `tokenjuice install codex` | `~/.codex/hooks.json` | `tokenjuice install codex --local` is available for repo-local verification |
 
 `tokenjuice doctor hooks` inspects installed host hooks together, spots stale Cellar-pinned Homebrew commands, and points back to the right install command for repair. the `--local` variant is for codex dev verification and expects that hook to point at the current repo build instead of the installed launcher on `PATH`.
-for claude code, this writes into `~/.claude/settings.json` under `hooks.PostToolUse` and preserves unrelated top-level settings keys while updating the hook subtree.
 
 ## rule model
 

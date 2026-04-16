@@ -93,51 +93,22 @@ direct payload:
 }
 ```
 
-## codex
+## host overview
 
-for codex, the clean path is a home hook:
+tokenjuice can install native host hooks for:
 
-```bash
-tokenjuice install codex
-tokenjuice doctor hooks
-```
+| Client | Install | Hook file | Notes |
+| --- | --- | --- | --- |
+| Claude Code | `tokenjuice install claude-code` | `~/.claude/settings.json` | Preserves unrelated settings keys while updating `hooks.PostToolUse` |
+| Codex CLI | `tokenjuice install codex` | `~/.codex/hooks.json` | `tokenjuice install codex --local` is available for repo-local verification |
 
-that writes a `PostToolUse` hook into `~/.codex/hooks.json` so codex can compact noisy `Bash` output after the command runs.
-
-for local repo verification, use:
-
-```bash
-tokenjuice install codex --local
-tokenjuice doctor hooks --local
-```
-
-that pins the hook to the current repo build instead of the installed launcher on `PATH`.
-
-important detail:
+shared behavior:
 
 - the original shell command still runs untouched
 - tokenjuice only rewrites the output that goes back through the hook
 - raw command execution logs are still raw
 - `tokenjuice doctor hooks` checks installed host hooks together instead of making you guess which integration drifted
 - `tokenjuice install codex --local` / `tokenjuice doctor hooks --local` are for testing the current repo build before release
-
-## claude code
-
-for claude code, the clean path is a home hook:
-
-```bash
-tokenjuice install claude-code
-tokenjuice doctor hooks
-```
-
-that writes a `PostToolUse` hook into `~/.claude/settings.json` under `hooks.PostToolUse` so claude code can compact noisy `Bash` output after the command runs.
-
-important detail:
-
-- unrelated top-level settings keys (`permissions`, `env`, `statusLine`, custom keys) are preserved
-- the original shell command still runs untouched
-- tokenjuice only rewrites the output that goes back through the hook
-- raw command execution logs are still raw
 
 library-side adapters can also use `runReduceJsonCli(...)` to call the CLI without rebuilding the child-process + JSON plumbing themselves.
 
