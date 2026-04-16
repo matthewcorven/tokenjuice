@@ -118,4 +118,66 @@ describe("runCodexPostToolUseHook", () => {
     expect(debug.rewrote).toBe(true);
     expect(debug.matchedReducer).toBe("git/status");
   });
+
+  it("skips rewriting generic fallback output for compound shell diagnostics", async () => {
+    const home = await createTempDir();
+    process.env.CODEX_HOME = home;
+
+    const payload = JSON.stringify({
+      hook_event_name: "PostToolUse",
+      tool_name: "Bash",
+      tool_input: {
+        command: "printf 'cwd: '; pwd; printf 'repo: '; git rev-parse --show-toplevel; git status --short --branch",
+      },
+      tool_response: Array.from({ length: 18 }, (_, index) => {
+        if (index === 0) {
+          return "cwd: /Users/vincentkoc/GIT/_Perso/openclaw";
+        }
+        if (index === 1) {
+          return "repo: /Users/vincentkoc/GIT/_Perso/openclaw";
+        }
+        return `worktree /Users/vincentkoc/GIT/_Perso/openclaw/.worktrees/pr-${66200 + index}`;
+      }).join("\n"),
+    });
+
+    const { code, output } = await captureStdout(() => runCodexPostToolUseHook(payload));
+    const debug = JSON.parse(await readFile(join(home, "tokenjuice-hook.last.json"), "utf8")) as {
+      rewrote: boolean;
+      skipped?: string;
+      matchedReducer?: string;
+    };
+
+    expect(code).toBe(0);
+    expect(output).toBe("");
+    expect(debug.rewrote).toBe(false);
+    expect(debug.skipped).toBe("generic-compound-command");
+    expect(debug.matchedReducer).toBe("generic/fallback");
+  });
+
+  it("skips rewriting weak generic fallback compaction", async () => {
+    const home = await createTempDir();
+    process.env.CODEX_HOME = home;
+
+    const payload = JSON.stringify({
+      hook_event_name: "PostToolUse",
+      tool_name: "Bash",
+      tool_input: {
+        command: "node -e \"console.log('x')\"",
+      },
+      tool_response: Array.from({ length: 18 }, (_, index) => `line ${index + 1} ${"x".repeat(24)}`).join("\n"),
+    });
+
+    const { code, output } = await captureStdout(() => runCodexPostToolUseHook(payload));
+    const debug = JSON.parse(await readFile(join(home, "tokenjuice-hook.last.json"), "utf8")) as {
+      rewrote: boolean;
+      skipped?: string;
+      matchedReducer?: string;
+    };
+
+    expect(code).toBe(0);
+    expect(output).toBe("");
+    expect(debug.rewrote).toBe(false);
+    expect(debug.skipped).toBe("generic-weak-compaction");
+    expect(debug.matchedReducer).toBe("generic/fallback");
+  });
 });

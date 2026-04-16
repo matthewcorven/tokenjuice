@@ -56,6 +56,47 @@ export function tokenizeCommand(command: string): string[] {
   return tokens;
 }
 
+export function isCompoundShellCommand(command: string): boolean {
+  let quote: "'" | "\"" | null = null;
+  let escaping = false;
+
+  for (let index = 0; index < command.length; index += 1) {
+    const char = command[index]!;
+
+    if (escaping) {
+      escaping = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaping = true;
+      continue;
+    }
+
+    if (quote) {
+      if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (char === "'" || char === "\"") {
+      quote = char;
+      continue;
+    }
+
+    if (char === ";" || char === "\n" || char === "|") {
+      return true;
+    }
+
+    if ((char === "&" || char === "|") && command[index + 1] === char) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function normalizeCommandSignature(command?: string): string | null {
   if (!command || command === "stdin" || command.startsWith("reduce:")) {
     return null;

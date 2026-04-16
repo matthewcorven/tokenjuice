@@ -2,9 +2,10 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 
+import { isCompoundShellCommand } from "./command.js";
 import { reduceExecution } from "./reduce.js";
 
-import type { ReduceOptions } from "../types.js";
+import type { CompactResult, ReduceOptions } from "../types.js";
 
 type CodexHookCommand = {
   type: "command";
@@ -31,6 +32,9 @@ type CodexPostToolUsePayload = {
   };
   tool_response?: unknown;
 };
+
+const GENERIC_FALLBACK_MIN_SAVED_CHARS = 120;
+const GENERIC_FALLBACK_MAX_RATIO = 0.75;
 
 export type InstallCodexHookResult = {
   hooksPath: string;
@@ -222,6 +226,33 @@ function shouldStoreFromEnv(): boolean {
   return value === "1" || value === "true" || value === "TRUE" || value === "yes" || value === "YES";
 }
 
+function getCodexRewriteSkipReason(command: string, combinedText: string, result: CompactResult): string | null {
+  const inlineText = result.inlineText.trim();
+  const rawText = combinedText.trim();
+  const rawChars = result.stats.rawChars;
+  const reducedChars = result.stats.reducedChars;
+
+  if (!inlineText || inlineText === rawText || reducedChars >= rawChars) {
+    return "no-compaction";
+  }
+
+  if (result.classification.matchedReducer !== "generic/fallback") {
+    return null;
+  }
+
+  if (isCompoundShellCommand(command)) {
+    return "generic-compound-command";
+  }
+
+  const savedChars = rawChars - reducedChars;
+  const ratio = rawChars === 0 ? 1 : reducedChars / rawChars;
+  if (savedChars < GENERIC_FALLBACK_MIN_SAVED_CHARS || ratio > GENERIC_FALLBACK_MAX_RATIO) {
+    return "generic-weak-compaction";
+  }
+
+  return null;
+}
+
 async function writeHookDebug(record: Record<string, unknown>): Promise<void> {
   const debugPath = join(getCodexHome(), "tokenjuice-hook.last.json");
   await mkdir(dirname(debugPath), { recursive: true });
@@ -290,8 +321,9 @@ export async function runCodexPostToolUseHook(rawText: string): Promise<number> 
     debug.reducedChars = reducedChars;
     debug.matchedReducer = result.classification.matchedReducer;
 
-    if (!result.inlineText.trim() || result.inlineText.trim() === combinedText.trim() || reducedChars >= rawChars) {
-      await writeHookDebug({ ...debug, skipped: "no-compaction" });
+    const skipReason = getCodexRewriteSkipReason(command, combinedText, result);
+    if (skipReason) {
+      await writeHookDebug({ ...debug, skipped: skipReason });
       return 0;
     }
 
