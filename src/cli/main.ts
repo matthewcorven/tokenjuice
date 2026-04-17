@@ -9,6 +9,7 @@ import { buildAnalysisEntry, discoverCandidates, doctorArtifacts, statsArtifacts
 import { doctorClaudeCodeHook, installClaudeCodeHook, runClaudeCodePostToolUseHook } from "../core/claude-code.js";
 import { doctorCodexHook, installCodexHook, runCodexPostToolUseHook, uninstallCodexHook } from "../core/codex.js";
 import { doctorInstalledHooks } from "../core/hook-doctor.js";
+import { doctorPiExtension, installPiExtension } from "../core/pi.js";
 import { verifyBuiltinFixtures } from "../core/fixtures.js";
 import { parseReduceJsonRequest } from "../core/json-protocol.js";
 import { reduceExecution } from "../core/reduce.js";
@@ -55,12 +56,13 @@ function printUsage(): void {
       "  tokenjuice wrap [--raw|--full] -- <command> [args...] [--tee] [--store] [--max-capture-bytes <n>]",
       "  tokenjuice install codex [--local]",
       "  tokenjuice install claude-code",
+      "  tokenjuice install pi [--local]",
       "  tokenjuice uninstall codex",
       "  tokenjuice ls",
       "  tokenjuice cat <artifact-id>",
       "  tokenjuice verify [--fixtures]",
       "  tokenjuice discover [file] [--source-command <cmd>] [--tool-name <name>] [--exit-code <n>]",
-      "  tokenjuice doctor [file|hooks|codex|claude-code] [--local] [--source-command <cmd>] [--tool-name <name>] [--exit-code <n>]",
+      "  tokenjuice doctor [file|hooks|codex|claude-code|pi] [--local] [--source-command <cmd>] [--tool-name <name>] [--exit-code <n>]",
       "  tokenjuice stats",
     ].join("\n"),
   );
@@ -343,7 +345,24 @@ async function runInstall(args: ParsedArgs): Promise<number> {
     process.stdout.write("doctor: tokenjuice doctor hooks\n");
     return 0;
   }
-  throw new Error("install currently supports: codex, claude-code");
+
+  if (target === "pi") {
+    const result = await installPiExtension(undefined, { local: args.local });
+    if (args.format === "json") {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return 0;
+    }
+
+    process.stdout.write(`installed pi extension: ${result.extensionPath}\n`);
+    if (result.backupPath) {
+      process.stdout.write(`backup: ${result.backupPath}\n`);
+    }
+    process.stdout.write("reload: /reload\n");
+    process.stdout.write("usage in pi: /tj status | /tj on | /tj off | /tj raw-next\n");
+    return 0;
+  }
+
+  throw new Error("install currently supports: codex, claude-code, pi");
 }
 
 async function runUninstall(args: ParsedArgs): Promise<number> {
@@ -534,12 +553,18 @@ async function runDoctor(args: ParsedArgs): Promise<number> {
 
     process.stdout.write(`hook health: ${report.status}\n`);
     for (const [name, integrationReport] of Object.entries(report.integrations)) {
-      const pathLabel = "hooksPath" in integrationReport ? integrationReport.hooksPath : integrationReport.settingsPath;
+      const pathLabel = "hooksPath" in integrationReport
+        ? integrationReport.hooksPath
+        : "settingsPath" in integrationReport
+          ? integrationReport.settingsPath
+          : integrationReport.extensionPath;
       process.stdout.write(`${name}:\n`);
       process.stdout.write(`- path: ${pathLabel}\n`);
       process.stdout.write(`- health: ${integrationReport.status}\n`);
-      process.stdout.write(`- expected command: ${integrationReport.expectedCommand}\n`);
-      if (integrationReport.detectedCommand) {
+      if ("expectedCommand" in integrationReport) {
+        process.stdout.write(`- expected command: ${integrationReport.expectedCommand}\n`);
+      }
+      if ("detectedCommand" in integrationReport && integrationReport.detectedCommand) {
         process.stdout.write(`- configured command: ${integrationReport.detectedCommand}\n`);
       }
       if (integrationReport.issues.length > 0) {
@@ -573,6 +598,32 @@ async function runDoctor(args: ParsedArgs): Promise<number> {
     if (report.detectedCommand) {
       process.stdout.write(`configured command: ${report.detectedCommand}\n`);
     }
+    if (report.issues.length > 0) {
+      process.stdout.write("issues:\n");
+      for (const issue of report.issues) {
+        process.stdout.write(`- ${issue}\n`);
+      }
+    }
+    if (report.missingPaths.length > 0) {
+      process.stdout.write("missing paths:\n");
+      for (const path of report.missingPaths) {
+        process.stdout.write(`- ${path}\n`);
+      }
+    }
+    process.stdout.write(`repair: ${report.fixCommand}\n`);
+    return report.status === "broken" ? 1 : 0;
+  }
+
+  if (args.positionals[0] === "pi") {
+    const report = await doctorPiExtension();
+
+    if (args.format === "json") {
+      process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+      return report.status === "broken" ? 1 : 0;
+    }
+
+    process.stdout.write(`extension path: ${report.extensionPath}\n`);
+    process.stdout.write(`health: ${report.status}\n`);
     if (report.issues.length > 0) {
       process.stdout.write("issues:\n");
       for (const issue of report.issues) {
