@@ -2,8 +2,11 @@ import { basename } from "node:path";
 
 import type { ToolExecutionInput } from "../types.js";
 
+type ShellOperator = ";" | "\n" | "|" | "&&" | "||";
+
 const FILE_CONTENT_INSPECTION_COMMANDS = new Set(["cat", "sed", "head", "tail", "nl", "bat", "batcat", "jq", "yq"]);
-const REPO_INVENTORY_COMMANDS = new Set(["find", "fd", "fdfind", "ls", "tree"]);
+const COMPOUND_SHELL_OPERATORS = new Set<ShellOperator>([";", "\n", "|", "&&", "||"]);
+const SEQUENTIAL_SHELL_OPERATORS = new Set<ShellOperator>([";", "\n", "&&", "||"]);
 
 function getNormalizedArgv(input: Pick<ToolExecutionInput, "argv" | "command">): string[] {
   if (input.argv?.length) {
@@ -12,10 +15,10 @@ function getNormalizedArgv(input: Pick<ToolExecutionInput, "argv" | "command">):
   if (!input.command) {
     return [];
   }
-  return tokenizeCommand(input.command);
+  return tokenizeCommand(stripLeadingCdPrefix(input.command));
 }
 
-function getNormalizedArgv0(argv: string[]): string | null {
+export function getCommandName(argv: string[]): string | null {
   const first = argv[0];
   if (!first) {
     return null;
@@ -77,7 +80,7 @@ export function tokenizeCommand(command: string): string[] {
   return tokens;
 }
 
-export function isCompoundShellCommand(command: string): boolean {
+function hasUnquotedShellOperator(command: string, operators: Set<ShellOperator>): boolean {
   let quote: "'" | "\"" | null = null;
   let escaping = false;
 
@@ -106,46 +109,87 @@ export function isCompoundShellCommand(command: string): boolean {
       continue;
     }
 
-    if (char === ";" || char === "\n" || char === "|") {
+    if ((char === ";" || char === "\n" || char === "|") && operators.has(char)) {
       return true;
     }
 
-    if ((char === "&" || char === "|") && command[index + 1] === char) {
+    if (char === "&" && command[index + 1] === "&" && operators.has("&&")) {
+      return true;
+    }
+
+    if (char === "|" && command[index + 1] === "|" && operators.has("||")) {
       return true;
     }
   }
 
   return false;
+}
+
+export function isCompoundShellCommand(command: string): boolean {
+  return hasUnquotedShellOperator(command, COMPOUND_SHELL_OPERATORS);
+}
+
+export function hasSequentialShellCommands(command: string): boolean {
+  return hasUnquotedShellOperator(command, SEQUENTIAL_SHELL_OPERATORS);
+}
+
+function gitGlobalOptionTakesValue(option: string): boolean {
+  return option === "-C"
+    || option === "-c"
+    || option === "--git-dir"
+    || option === "--work-tree"
+    || option === "--namespace"
+    || option === "--exec-path"
+    || option === "--super-prefix"
+    || option === "--config-env";
+}
+
+function isGitGlobalOptionWithInlineValue(option: string): boolean {
+  return option.startsWith("--git-dir=")
+    || option.startsWith("--work-tree=")
+    || option.startsWith("--namespace=")
+    || option.startsWith("--exec-path=")
+    || option.startsWith("--super-prefix=")
+    || option.startsWith("--config-env=");
+}
+
+export function getGitSubcommand(argv: string[]): string | null {
+  if (getCommandName(argv) !== "git") {
+    return null;
+  }
+
+  for (let index = 1; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (!arg) {
+      continue;
+    }
+
+    if (gitGlobalOptionTakesValue(arg)) {
+      index += 1;
+      continue;
+    }
+
+    if (isGitGlobalOptionWithInlineValue(arg)) {
+      continue;
+    }
+
+    if (arg.startsWith("-")) {
+      continue;
+    }
+
+    return arg;
+  }
+
+  return null;
 }
 
 export function isFileContentInspectionCommand(input: Pick<ToolExecutionInput, "argv" | "command">): boolean {
   const argv = getNormalizedArgv(input);
-  const argv0 = getNormalizedArgv0(argv);
+  const argv0 = getCommandName(argv);
   if (!argv0) {
     return false;
   }
   return FILE_CONTENT_INSPECTION_COMMANDS.has(argv0);
-}
-
-export function isRepositoryInspectionCommand(input: Pick<ToolExecutionInput, "argv" | "command">): boolean {
-  const argv = getNormalizedArgv(input);
-  const argv0 = getNormalizedArgv0(argv);
-  if (!argv0) {
-    return false;
-  }
-  if (isFileContentInspectionCommand(input)) {
-    return true;
-  }
-  if (REPO_INVENTORY_COMMANDS.has(argv0)) {
-    return true;
-  }
-  if (argv0 === "rg" && argv.includes("--files")) {
-    return true;
-  }
-  if (argv0 === "git" && argv[1] === "ls-files") {
-    return true;
-  }
-  return false;
 }
 
 export function normalizeCommandSignature(command?: string): string | null {
@@ -158,7 +202,7 @@ export function normalizeCommandSignature(command?: string): string | null {
     return null;
   }
 
-  const normalized = getNormalizedArgv0(argv);
+  const normalized = getCommandName(argv);
   return normalized || null;
 }
 
@@ -252,7 +296,12 @@ export function normalizeExecutionInput(input: ToolExecutionInput): ToolExecutio
     return input;
   }
 
-  const argv = tokenizeCommand(input.command);
+  const effectiveCommand = stripLeadingCdPrefix(input.command);
+  if (isCompoundShellCommand(effectiveCommand)) {
+    return input;
+  }
+
+  const argv = tokenizeCommand(effectiveCommand);
   if (argv.length === 0) {
     return input;
   }

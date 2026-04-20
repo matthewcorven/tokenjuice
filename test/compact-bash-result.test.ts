@@ -51,6 +51,112 @@ describe("compactBashResult", () => {
     });
   });
 
+  it("allows safe inventory compaction under the safe-inventory inspection policy", async () => {
+    const outcome = await compactBashResult({
+      source: "pi",
+      command: "find src/rules -maxdepth 2 -type f | head -n 40",
+      visibleText: Array.from({ length: 40 }, (_, index) => `src/rules/example-${index + 1}.json`).join("\n"),
+      inspectionPolicy: "allow-safe-inventory",
+      minSavedCharsAny: 8,
+      genericFallbackMinSavedChars: 120,
+      genericFallbackMaxRatio: 0.75,
+      skipGenericFallbackForCompoundCommands: true,
+    });
+
+    expect(outcome.action).toBe("rewrite");
+    if (outcome.action === "rewrite") {
+      expect(outcome.result.classification.matchedReducer).toBe("filesystem/find");
+      expect(outcome.result.inlineText).toContain("40 matches");
+    }
+  });
+
+  it("skips unsafe inventory pipelines under the safe-inventory inspection policy", async () => {
+    const outcome = await compactBashResult({
+      source: "pi",
+      command: "git -C repo ls-files | jq -R .",
+      visibleText: Array.from({ length: 40 }, (_, index) => JSON.stringify(`src/file-${index + 1}.ts`)).join("\n"),
+      inspectionPolicy: "allow-safe-inventory",
+      genericFallbackMinSavedChars: 120,
+      genericFallbackMaxRatio: 0.75,
+      skipGenericFallbackForCompoundCommands: true,
+    });
+
+    expect(outcome).toMatchObject({
+      action: "keep",
+      reason: "unsafe-inventory-pipeline",
+    });
+  });
+
+  it("skips file content under the safe-inventory inspection policy", async () => {
+    const outcome = await compactBashResult({
+      source: "pi",
+      command: "cat src/core/reduce.ts",
+      visibleText: "export function reduceExecution() {}\n",
+      inspectionPolicy: "allow-safe-inventory",
+      genericFallbackMinSavedChars: 120,
+      genericFallbackMaxRatio: 0.75,
+      skipGenericFallbackForCompoundCommands: true,
+    });
+
+    expect(outcome).toMatchObject({
+      action: "keep",
+      reason: "file-content-inspection-command",
+    });
+  });
+
+  it("keeps tree output raw under the safe-inventory inspection policy", async () => {
+    const outcome = await compactBashResult({
+      source: "pi",
+      command: "tree src",
+      visibleText: Array.from({ length: 40 }, (_, index) => `src/file-${index + 1}.ts`).join("\n"),
+      inspectionPolicy: "allow-safe-inventory",
+      genericFallbackMinSavedChars: 120,
+      genericFallbackMaxRatio: 0.75,
+      skipGenericFallbackForCompoundCommands: true,
+    });
+
+    expect(outcome).toMatchObject({
+      action: "keep",
+      reason: "inspection-command",
+    });
+  });
+
+  it("skips cd-prefixed file content under the safe-inventory inspection policy", async () => {
+    const outcome = await compactBashResult({
+      source: "pi",
+      command: "cd /repo && cat src/core/reduce.ts",
+      visibleText: Array.from({ length: 60 }, (_, index) => `line ${index + 1}`).join("\n"),
+      inspectionPolicy: "allow-safe-inventory",
+      genericFallbackMinSavedChars: 120,
+      genericFallbackMaxRatio: 0.75,
+      skipGenericFallbackForCompoundCommands: true,
+    });
+
+    expect(outcome).toMatchObject({
+      action: "keep",
+      reason: "file-content-inspection-command",
+    });
+  });
+
+  it("rewrites cd-prefixed safe inventory through the inventory reducer", async () => {
+    const outcome = await compactBashResult({
+      source: "pi",
+      command: "cd /repo && rg --files src/rules",
+      visibleText: Array.from({ length: 40 }, (_, index) => `src/rules/example-${index + 1}.json`).join("\n"),
+      inspectionPolicy: "allow-safe-inventory",
+      minSavedCharsAny: 8,
+      genericFallbackMinSavedChars: 120,
+      genericFallbackMaxRatio: 0.75,
+      skipGenericFallbackForCompoundCommands: true,
+    });
+
+    expect(outcome.action).toBe("rewrite");
+    if (outcome.action === "rewrite") {
+      expect(outcome.result.classification.matchedReducer).toBe("filesystem/rg-files");
+      expect(outcome.result.inlineText).toContain("40 paths");
+    }
+  });
+
   it("returns a keep decision for weak generic fallback compaction", async () => {
     const outcome = await compactBashResult({
       source: "codex",

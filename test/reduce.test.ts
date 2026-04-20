@@ -328,6 +328,102 @@ describe("reduceExecution", () => {
     expect(result.stats.ratio).toBeLessThan(0.5);
   });
 
+  it.each([
+    {
+      command: "rg --files src/rules",
+      argv: ["rg", "--files", "src/rules"],
+      reducer: "filesystem/rg-files",
+    },
+    {
+      command: "git ls-files src",
+      argv: ["git", "ls-files", "src"],
+      reducer: "filesystem/git-ls-files",
+    },
+    {
+      command: "git -C repo ls-files src",
+      argv: ["git", "-C", "repo", "ls-files", "src"],
+      reducer: "filesystem/git-ls-files",
+    },
+    {
+      command: "fd codex src",
+      argv: ["fd", "codex", "src"],
+      reducer: "filesystem/fd",
+    },
+  ])("compacts $command through a filesystem inventory reducer", async ({ command, argv, reducer }) => {
+    const result = await reduceExecution({
+      toolName: "exec",
+      command,
+      argv,
+      stdout: Array.from({ length: 60 }, (_, index) => `src/path-${index + 1}.ts`).join("\n"),
+      exitCode: 0,
+    });
+
+    expect(result.classification.matchedReducer).toBe(reducer);
+    expect(result.inlineText).toContain("60 paths");
+    expect(result.stats.ratio).toBeLessThan(0.5);
+  });
+
+  it("does not treat unrelated git commands containing ls-files as git ls-files inventory", async () => {
+    const result = await reduceExecution({
+      toolName: "exec",
+      command: "git grep ls-files src",
+      combinedText: Array.from({ length: 30 }, (_, index) => `src/file-${index + 1}.ts:${index + 1}: mentions ls-files`).join("\n"),
+      exitCode: 0,
+    });
+
+    expect(result.classification.matchedReducer).toBe("search/git-grep");
+  });
+
+  it("does not route unsafe inventory pipelines into filesystem reducers without adapter gating", async () => {
+    const result = await reduceExecution({
+      toolName: "exec",
+      command: "rg --files | rg TODO src",
+      combinedText: Array.from({ length: 40 }, (_, index) => `src/file-${index + 1}.ts`).join("\n"),
+      exitCode: 0,
+    });
+
+    expect(result.classification.matchedReducer).not.toBe("filesystem/rg-files");
+  });
+
+  it("does not count normal rg --files paths containing error as errors", async () => {
+    const result = await reduceExecution({
+      toolName: "exec",
+      command: "rg --files src",
+      combinedText: "src/error.ts\nsrc/normal.ts\n",
+      exitCode: 0,
+    });
+
+    expect(result.classification.matchedReducer).toBe("filesystem/rg-files");
+    expect(result.facts?.path).toBe(2);
+    expect(result.facts?.error).toBe(0);
+  });
+
+  it("does not count normal fd paths containing error as errors", async () => {
+    const result = await reduceExecution({
+      toolName: "exec",
+      command: "fd src",
+      combinedText: "src/error.ts\nsrc/normal.ts\n",
+      exitCode: 0,
+    });
+
+    expect(result.classification.matchedReducer).toBe("filesystem/fd");
+    expect(result.facts?.path).toBe(2);
+    expect(result.facts?.error).toBe(0);
+  });
+
+  it("counts fd error-prefixed output as errors instead of paths", async () => {
+    const result = await reduceExecution({
+      toolName: "exec",
+      command: "fd src",
+      combinedText: "[fd error]: regex parse error\nsrc/normal.ts\n",
+      exitCode: 1,
+    });
+
+    expect(result.classification.matchedReducer).toBe("filesystem/fd");
+    expect(result.facts?.path).toBe(1);
+    expect(result.facts?.error).toBe(1);
+  });
+
   it("matches pnpm test runs to the test reducer family", async () => {
     const result = await reduceExecution({
       toolName: "exec",

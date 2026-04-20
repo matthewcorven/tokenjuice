@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  getGitSubcommand,
+  hasSequentialShellCommands,
   isFileContentInspectionCommand,
-  isRepositoryInspectionCommand,
   normalizeCommandSignature,
   normalizeExecutionInput,
   stripLeadingCdPrefix,
@@ -33,6 +34,52 @@ describe("normalizeExecutionInput", () => {
       command: "find src -maxdepth 2 -type f",
     }).argv).toEqual(["find", "src", "-maxdepth", "2", "-type", "f"]);
   });
+
+  it("derives argv from the effective command after a safe cd prefix", () => {
+    expect(normalizeExecutionInput({
+      toolName: "exec",
+      command: "cd /repo && cat README.md",
+    }).argv).toEqual(["cat", "README.md"]);
+  });
+
+  it("does not derive argv from compound shell commands", () => {
+    expect(normalizeExecutionInput({
+      toolName: "exec",
+      command: "rg --files | rg TODO src",
+    }).argv).toBeUndefined();
+  });
+});
+
+describe("hasSequentialShellCommands", () => {
+  it.each([
+    "ls src && rg TODO src",
+    "find src -type f; git status",
+    "ls src\nrg TODO src",
+    "rg --files || true",
+  ])("detects `%s` as a command sequence", (command) => {
+    expect(hasSequentialShellCommands(command)).toBe(true);
+  });
+
+  it.each([
+    "find src -type f | sort | head -n 20",
+    "rg --files | rg test",
+    "printf 'a && b\\n'",
+    "sed -n '1,20p' README.md",
+  ])("does not treat `%s` as a sequential command", (command) => {
+    expect(hasSequentialShellCommands(command)).toBe(false);
+  });
+});
+
+describe("getGitSubcommand", () => {
+  it.each([
+    { command: "git ls-files src", subcommand: "ls-files" },
+    { command: "git -C repo ls-files src", subcommand: "ls-files" },
+    { command: "git --no-pager ls-files src", subcommand: "ls-files" },
+    { command: "git -c advice.statusHints=false -C repo ls-files", subcommand: "ls-files" },
+    { command: "git --git-dir=.git --work-tree=. status --short", subcommand: "status" },
+  ])("finds $subcommand in `%s`", ({ command, subcommand }) => {
+    expect(getGitSubcommand(tokenizeCommand(command))).toBe(subcommand);
+  });
 });
 
 describe("isFileContentInspectionCommand", () => {
@@ -49,31 +96,12 @@ describe("isFileContentInspectionCommand", () => {
     expect(isFileContentInspectionCommand({ command })).toBe(true);
   });
 
+  it("detects file inspection after a safe cd prefix", () => {
+    expect(isFileContentInspectionCommand({ command: "cd /repo && cat README.md" })).toBe(true);
+  });
+
   it("returns false for normal search commands", () => {
     expect(isFileContentInspectionCommand({ command: "rg AssertionError src" })).toBe(false);
-  });
-});
-
-describe("isRepositoryInspectionCommand", () => {
-  it.each([
-    "cat README.md",
-    "find src/rules -maxdepth 2 -type f",
-    "fd codex src",
-    "fdfind codex src",
-    "ls src/rules",
-    "tree src/rules",
-    "rg --files src/rules",
-    "git ls-files src",
-  ])("detects `%s` as repository inspection", (command) => {
-    expect(isRepositoryInspectionCommand({ command })).toBe(true);
-  });
-
-  it.each([
-    "rg AssertionError src",
-    "git status --short",
-    "pnpm test",
-  ])("does not over-match `%s`", (command) => {
-    expect(isRepositoryInspectionCommand({ command })).toBe(false);
   });
 });
 
