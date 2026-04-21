@@ -24,7 +24,7 @@ for pre-tool wrapping, preserve shell semantics (for example `bash -lc '<cmd>'`)
 
 ## implementation checklist
 
-for a new host adapter in `src/core/<host>.ts`:
+for a new host adapter in `src/hosts/<host>/index.ts`:
 
 - install flow
   - write/update host config atomically
@@ -51,14 +51,14 @@ then wire CLI + exports:
 - `src/index.ts`
   - runtime/install/doctor exports
   - result/report type exports
-- `src/core/hook-doctor.ts`
+- `src/hosts/shared/hook-doctor.ts`
   - add the host to aggregate doctor report
 
 ## test strategy (required)
 
 add host-specific tests and aggregate tests:
 
-- `test/<host>.test.ts`
+- `test/hosts/<host>.test.ts`
   - install idempotency
   - preserve unrelated config fields
   - doctor status matrix (`disabled`, `warn`, `broken`, `ok`)
@@ -70,7 +70,7 @@ add host-specific tests and aggregate tests:
 
 new adapters often fail CI/local due to leaked machine config. isolate host homes explicitly:
 
-- set and reset host env vars in each suite (`CODEX_HOME`, `CLAUDE_HOME`, `CURSOR_HOME`, `PI_CODING_AGENT_DIR`, etc.)
+- set and reset host env vars in each suite (`CODEX_HOME`, `CLAUDE_CONFIG_DIR`, `CLAUDE_HOME`, `CURSOR_HOME`, `PI_CODING_AGENT_DIR`, etc.)
 - avoid reading real `~/.<host>` in tests
 - use temp dirs for all config paths
 - restore `PATH` after each test
@@ -83,7 +83,7 @@ minimum gate for a new host adapter:
 
 ```bash
 pnpm typecheck
-pnpm vitest run test/<host>.test.ts
+pnpm vitest run test/hosts/<host>.test.ts
 pnpm vitest run test/hosts/codex.test.ts test/hosts/claude-code.test.ts test/hosts/pi.test.ts
 ```
 
