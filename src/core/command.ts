@@ -7,6 +7,7 @@ type ShellOperator = ";" | "\n" | "|" | "&&" | "||";
 const FILE_CONTENT_INSPECTION_COMMANDS = new Set(["cat", "sed", "head", "tail", "nl", "bat", "batcat", "jq", "yq"]);
 const COMPOUND_SHELL_OPERATORS = new Set<ShellOperator>([";", "\n", "|", "&&", "||"]);
 const SEQUENTIAL_SHELL_OPERATORS = new Set<ShellOperator>([";", "\n", "&&", "||"]);
+const SHELL_COMMAND_LAUNCHERS = new Set(["bash", "sh", "zsh", "fish"]);
 
 function getNormalizedArgv(input: Pick<ToolExecutionInput, "argv" | "command">): string[] {
   if (input.argv?.length) {
@@ -292,6 +293,32 @@ function matchLeadingCdChain(command: string): string | null {
 
 
 export function normalizeExecutionInput(input: ToolExecutionInput): ToolExecutionInput {
+  const shellWrapped = unwrapShellLauncherCommand(input);
+  if (shellWrapped) {
+    const effectiveCommand = stripLeadingCdPrefix(shellWrapped);
+    if (isCompoundShellCommand(effectiveCommand)) {
+      const { argv: _argv, ...restInput } = input;
+      return {
+        ...restInput,
+        command: effectiveCommand,
+      };
+    }
+
+    const argv = tokenizeCommand(effectiveCommand);
+    if (argv.length === 0) {
+      return {
+        ...input,
+        command: effectiveCommand,
+      };
+    }
+
+    return {
+      ...input,
+      command: effectiveCommand,
+      argv,
+    };
+  }
+
   if (input.argv?.length || !input.command) {
     return input;
   }
@@ -310,4 +337,64 @@ export function normalizeExecutionInput(input: ToolExecutionInput): ToolExecutio
     ...input,
     argv,
   };
+}
+
+function unwrapShellLauncherCommand(input: ToolExecutionInput): string | null {
+  const argv = input.argv;
+  if (!argv || argv.length !== 3) {
+    return null;
+  }
+
+  const launcher = getCommandName(argv);
+  const launchFlag = argv[1];
+  const nestedCommand = argv[2];
+  if (
+    !launcher
+    || !isLikelyShellLauncher(launcher, argv[0])
+    || (launchFlag !== "-c" && launchFlag !== "-lc")
+    || typeof nestedCommand !== "string"
+    || nestedCommand.trim().length === 0
+  ) {
+    return null;
+  }
+
+  return nestedCommand;
+}
+
+function isLikelyShellLauncher(launcherName: string, launcherPath?: string): boolean {
+  const normalized = launcherName.toLowerCase().replace(/\.exe$/u, "");
+  if (SHELL_COMMAND_LAUNCHERS.has(normalized)) {
+    return true;
+  }
+
+  if (
+    normalized === "dash"
+    || normalized === "ksh"
+    || normalized === "mksh"
+    || normalized === "ash"
+    || normalized === "csh"
+    || normalized === "tcsh"
+  ) {
+    return true;
+  }
+
+  const pathNormalized = launcherPath?.toLowerCase().replace(/\\/gu, "/");
+  if (!pathNormalized) return false;
+  if (!pathNormalized.includes("/bin/")) return false;
+  return (
+    pathNormalized.endsWith("/bash")
+    || pathNormalized.endsWith("/sh")
+    || pathNormalized.endsWith("/zsh")
+    || pathNormalized.endsWith("/fish")
+    || pathNormalized.endsWith("/dash")
+    || pathNormalized.endsWith("/ksh")
+    || pathNormalized.endsWith("/mksh")
+    || pathNormalized.endsWith("/ash")
+    || pathNormalized.endsWith("/csh")
+    || pathNormalized.endsWith("/tcsh")
+    || pathNormalized.endsWith("/bash.exe")
+    || pathNormalized.endsWith("/sh.exe")
+    || pathNormalized.endsWith("/zsh.exe")
+    || pathNormalized.endsWith("/fish.exe")
+  );
 }
