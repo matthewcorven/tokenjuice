@@ -2,8 +2,10 @@ import type { PiContext, PiTheme } from "./pi-types.js";
 import type { TokenjuiceStatusSnapshot } from "./status.js";
 import { formatCompactNumber } from "./status.js";
 
+const ANSI_SGR_PATTERN = new RegExp("\\u001B\\[[0-9;]*m", "g");
+
 function visibleWidth(text: string): number {
-  return String(text).replace(/\x1b\[[0-9;]*m/g, "").length;
+  return String(text).replace(ANSI_SGR_PATTERN, "").length;
 }
 
 function truncateToWidth(text: string, width: number): string {
@@ -11,7 +13,7 @@ function truncateToWidth(text: string, width: number): string {
     return text;
   }
 
-  const plain = String(text).replace(/\x1b\[[0-9;]*m/g, "");
+  const plain = String(text).replace(ANSI_SGR_PATTERN, "");
   return plain.slice(0, Math.max(0, width));
 }
 

@@ -37,7 +37,7 @@ export async function runReduceJsonCli(
       cwd: options.cwd,
       env: {
         ...process.env,
-        ...(options.env ?? {}),
+        ...options.env,
       },
       shell: false,
       stdio: ["pipe", "pipe", "pipe"],

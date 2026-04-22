@@ -548,9 +548,7 @@ function selectInlineText(
 }
 
 export async function reduceExecution(input: ToolExecutionInput, opts: ReduceOptions = {}): Promise<CompactResult> {
-  const rules = await loadRules({
-    ...(opts.cwd ? { cwd: opts.cwd } : {}),
-  });
+  const rules = await loadRules(opts.cwd ? { cwd: opts.cwd } : undefined);
   return reduceExecutionWithRules(input, rules, opts);
 }
 

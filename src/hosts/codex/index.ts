@@ -11,7 +11,7 @@ import { classifyOnly } from "../../core/reduce.js";
 import { countTextChars, stripAnsi } from "../../core/text.js";
 import { extractHookCommandPaths, isNodeExecutablePath, parseShellWords, shellQuote } from "../shared/hook-command.js";
 
-import type { CompactResult, ReduceOptions, ToolExecutionInput } from "../../types.js";
+import type { ToolExecutionInput } from "../../types.js";
 
 type CodexHookCommand = {
   type: "command";

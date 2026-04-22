@@ -155,10 +155,10 @@ describe("rules", () => {
   it("verifies builtin rules cleanly", async () => {
     const results = await verifyBuiltinRules();
     const failed = results.filter((result) => !result.ok);
-    expect(
-      failed,
-      failed.length > 0 ? summarizeFailures(failed) : undefined,
-    ).toEqual([]);
+    if (failed.length > 0) {
+      throw new Error(summarizeFailures(failed));
+    }
+    expect(failed).toEqual([]);
   });
 
   it("loads builtin fixtures successfully", async () => {
@@ -190,10 +190,10 @@ describe("rules", () => {
   it("verifies builtin fixtures cleanly", async () => {
     const results = await verifyBuiltinFixtures();
     const failed = results.filter((result) => !result.ok);
-    expect(
-      failed,
-      failed.length > 0 ? summarizeFailures(failed) : undefined,
-    ).toEqual([]);
+    if (failed.length > 0) {
+      throw new Error(summarizeFailures(failed));
+    }
+    expect(failed).toEqual([]);
   });
 
   it("lets a project rule override a builtin by id", async () => {

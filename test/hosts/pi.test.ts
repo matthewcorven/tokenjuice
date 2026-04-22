@@ -209,7 +209,7 @@ describe("installPiExtension", () => {
     await writeFile(localNodePath, "#!/usr/bin/env bash\nexit 0\n", { encoding: "utf8", mode: 0o755 });
     await writeFile(localCliPath, "console.log('tokenjuice');\n", "utf8");
 
-    const result = await installPiExtension(extensionPath, {
+    await installPiExtension(extensionPath, {
       local: true,
       binaryPath: localCliPath,
       nodePath: localNodePath,

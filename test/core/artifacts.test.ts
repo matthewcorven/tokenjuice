@@ -49,8 +49,8 @@ describe("artifacts", () => {
       storeDir,
     );
 
+    expect(ref.id).toMatch(/^tj_/u);
     if (process.platform === "win32") {
-      expect(ref.id).toMatch(/^tj_/u);
       return;
     }
 

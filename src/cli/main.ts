@@ -316,7 +316,7 @@ async function runReduceJson(args: ParsedArgs): Promise<number> {
 
   const request = parseReduceJsonRequest(JSON.parse(rawText) as unknown);
   const result = await reduceExecution(request.input, {
-    ...(request.options ?? {}),
+    ...request.options,
     ...(args.classifier ? { classifier: args.classifier } : {}),
     ...(args.raw ? { raw: true } : {}),
     ...(args.trace ? { trace: true } : {}),

@@ -2,6 +2,24 @@ import { describe, expect, it } from "vitest";
 
 import { compactBashResult } from "../../../src/core/integrations/compact-bash-result.js";
 
+type CompactBashResultOutcome = Awaited<ReturnType<typeof compactBashResult>>;
+
+function expectRewrite(outcome: CompactBashResultOutcome): Extract<CompactBashResultOutcome, { action: "rewrite" }> {
+  expect(outcome.action).toBe("rewrite");
+  if (outcome.action !== "rewrite") {
+    throw new Error(`expected rewrite outcome, received ${outcome.action}`);
+  }
+  return outcome;
+}
+
+function expectKeep(outcome: CompactBashResultOutcome): Extract<CompactBashResultOutcome, { action: "keep" }> {
+  expect(outcome.action).toBe("keep");
+  if (outcome.action !== "keep") {
+    throw new Error(`expected keep outcome, received ${outcome.action}`);
+  }
+  return outcome;
+}
+
 describe("compactBashResult", () => {
   it("uses trusted full text when provided", async () => {
     const outcome = await compactBashResult({
@@ -25,13 +43,11 @@ describe("compactBashResult", () => {
       skipGenericFallbackForCompoundCommands: true,
     });
 
-    expect(outcome.action).toBe("rewrite");
-    if (outcome.action === "rewrite") {
-      expect(outcome.usedTrustedFullText).toBe(true);
-      expect(outcome.rawText).toContain("src/hosts/pi/index.ts");
-      expect(outcome.result.inlineText).toContain("M: src/hosts/pi/index.ts");
-      expect(outcome.result.inlineText).not.toContain("truncated output");
-    }
+    const rewritten = expectRewrite(outcome);
+    expect(rewritten.usedTrustedFullText).toBe(true);
+    expect(rewritten.rawText).toContain("src/hosts/pi/index.ts");
+    expect(rewritten.result.inlineText).toContain("M: src/hosts/pi/index.ts");
+    expect(rewritten.result.inlineText).not.toContain("truncated output");
   });
 
   it("skips repository inspection commands before compaction when requested", async () => {
@@ -63,11 +79,9 @@ describe("compactBashResult", () => {
       skipGenericFallbackForCompoundCommands: true,
     });
 
-    expect(outcome.action).toBe("rewrite");
-    if (outcome.action === "rewrite") {
-      expect(outcome.result.classification.matchedReducer).toBe("filesystem/find");
-      expect(outcome.result.inlineText).toContain("40 matches");
-    }
+    const rewritten = expectRewrite(outcome);
+    expect(rewritten.result.classification.matchedReducer).toBe("filesystem/find");
+    expect(rewritten.result.inlineText).toContain("40 matches");
   });
 
   it("skips unsafe inventory pipelines under the safe-inventory inspection policy", async () => {
@@ -150,11 +164,9 @@ describe("compactBashResult", () => {
       skipGenericFallbackForCompoundCommands: true,
     });
 
-    expect(outcome.action).toBe("rewrite");
-    if (outcome.action === "rewrite") {
-      expect(outcome.result.classification.matchedReducer).toBe("filesystem/rg-files");
-      expect(outcome.result.inlineText).toContain("40 paths");
-    }
+    const rewritten = expectRewrite(outcome);
+    expect(rewritten.result.classification.matchedReducer).toBe("filesystem/rg-files");
+    expect(rewritten.result.inlineText).toContain("40 paths");
   });
 
   it("returns a keep decision for weak generic fallback compaction", async () => {
@@ -168,11 +180,9 @@ describe("compactBashResult", () => {
       skipGenericFallbackForCompoundCommands: true,
     });
 
-    expect(outcome.action).toBe("keep");
-    if (outcome.action === "keep") {
-      expect(outcome.reason).toBe("generic-weak-compaction");
-      expect(outcome.result?.classification.matchedReducer).toBe("generic/fallback");
-    }
+    const kept = expectKeep(outcome);
+    expect(kept.reason).toBe("generic-weak-compaction");
+    expect(kept.result?.classification.matchedReducer).toBe("generic/fallback");
   });
 
   it("compacts generic/fallback output when the command is only a cd-prefixed chain", async () => {
@@ -194,11 +204,9 @@ describe("compactBashResult", () => {
       skipGenericFallbackForCompoundCommands: true,
     });
 
-    expect(outcome.action).toBe("rewrite");
-    if (outcome.action === "rewrite") {
-      expect(outcome.result.inlineText.length).toBeLessThan(longOutput.length);
-      expect(outcome.result.classification.matchedReducer).toBe("generic/fallback");
-    }
+    const rewritten = expectRewrite(outcome);
+    expect(rewritten.result.inlineText.length).toBeLessThan(longOutput.length);
+    expect(rewritten.result.classification.matchedReducer).toBe("generic/fallback");
   });
 
   it("still skips genuinely compound commands after stripping cd prefixes", async () => {
@@ -214,10 +222,8 @@ describe("compactBashResult", () => {
       skipGenericFallbackForCompoundCommands: true,
     });
 
-    expect(outcome.action).toBe("keep");
-    if (outcome.action === "keep") {
-      expect(outcome.reason).toBe("generic-compound-command");
-    }
+    const kept = expectKeep(outcome);
+    expect(kept.reason).toBe("generic-compound-command");
   });
 
 });

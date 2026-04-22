@@ -1463,7 +1463,7 @@ describe("reduceExecution", () => {
   it("compresses large docker ps tables while counting containers", async () => {
     const rows = Array.from(
       { length: 130 },
-      (_, index) => `c${index.toString().padStart(11, "0")}   api:${index}   \"node server.js\"   ${index + 1} hours ago   Up ${index + 1} hours   0.0.0.0:${3000 + index}->3000/tcp   api-${index}`,
+      (_, index) => `c${index.toString().padStart(11, "0")}   api:${index}   "node server.js"   ${index + 1} hours ago   Up ${index + 1} hours   0.0.0.0:${3000 + index}->3000/tcp   api-${index}`,
     ).join("\n");
     const result = await reduceExecution({
       toolName: "exec",
@@ -1657,7 +1657,7 @@ describe("reduceExecution", () => {
       argv: ["docker", "compose", "ps"],
       combinedText: [
         "NAME          IMAGE        COMMAND         SERVICE   STATUS           PORTS",
-        ...Array.from({ length: 120 }, (_, index) => `api-${index}      api:latest   \"node server\"   api       running(healthy) 0.0.0.0:${3000 + index}->3000/tcp`),
+        ...Array.from({ length: 120 }, (_, index) => `api-${index}      api:latest   "node server"   api       running(healthy) 0.0.0.0:${3000 + index}->3000/tcp`),
       ].join("\n"),
       exitCode: 0,
     });

@@ -6,15 +6,6 @@ import { homedir } from "node:os";
 import { compactBashResult } from "../../core/integrations/compact-bash-result.js";
 import { extractHookCommandPaths, isNodeExecutablePath, parseShellWords, shellQuote } from "../shared/hook-command.js";
 
-import type { CompactResult, ReduceOptions } from "../../types.js";
-
-type ClaudeCodeHookCommand = {
-  type: "command";
-  command: string;
-  statusMessage?: string;
-  timeout?: number;
-};
-
 type ClaudeCodeHook = Record<string, unknown>;
 
 type ClaudeCodeHookMatcherGroup = Record<string, unknown> & {
