@@ -1,6 +1,7 @@
 import type { ClassificationResult, CompiledRule, JsonRule, ToolExecutionInput } from "../types.js";
 
-import { getGitSubcommand } from "./command.js";
+import { getGitSubcommand } from "./command-identity.js";
+import { deriveCommandMatchCandidates, type CommandMatchCandidate } from "./command-match.js";
 
 function includesAll(argv: string[], expected: string[]): boolean {
   return expected.every((part) => argv.includes(part));
@@ -42,8 +43,41 @@ function includesCommandPart(command: string, part: string): boolean {
 
 type RuleLike = JsonRule | CompiledRule;
 
+type RuleMatchSelection<T extends RuleLike> = {
+  rule: T;
+  candidate: CommandMatchCandidate;
+};
+
+export type ResolvedRuleMatch<T extends RuleLike = RuleLike> = {
+  rule: T;
+  candidate: CommandMatchCandidate;
+  candidateInput: ToolExecutionInput;
+  classification: ClassificationResult;
+};
+
 function getJsonRule(rule: RuleLike): JsonRule {
   return "rule" in rule ? rule.rule : rule;
+}
+
+function getCandidatePriority(candidate: CommandMatchCandidate): number {
+  switch (candidate.source) {
+    case "effective":
+      return 2;
+    case "shell-body":
+      return 1;
+    case "original":
+    default:
+      return 0;
+  }
+}
+
+function applyCommandMatchCandidate(input: ToolExecutionInput, candidate: CommandMatchCandidate): ToolExecutionInput {
+  const { command: _command, ...rest } = input;
+  return {
+    ...rest,
+    ...(candidate.command ? { command: candidate.command } : {}),
+    argv: candidate.argv,
+  };
 }
 
 export function matchesRule(ruleLike: RuleLike, input: ToolExecutionInput): boolean {
@@ -97,6 +131,84 @@ function scoreRule(ruleLike: RuleLike): number {
   );
 }
 
+function compareSelections(left: RuleMatchSelection<RuleLike>, right: RuleMatchSelection<RuleLike>): number {
+  const scoreDiff = scoreRule(right.rule) - scoreRule(left.rule);
+  if (scoreDiff !== 0) {
+    return scoreDiff;
+  }
+
+  const candidateDiff = getCandidatePriority(right.candidate) - getCandidatePriority(left.candidate);
+  if (candidateDiff !== 0) {
+    return candidateDiff;
+  }
+
+  return getJsonRule(left.rule).id.localeCompare(getJsonRule(right.rule).id);
+}
+
+export function findBestRuleMatch<T extends RuleLike>(
+  input: ToolExecutionInput,
+  rules: T[],
+): RuleMatchSelection<T> | undefined {
+  const candidates = deriveCommandMatchCandidates(input);
+  const specificMatches: Array<RuleMatchSelection<T>> = [];
+  let fallbackSelection: RuleMatchSelection<T> | undefined;
+
+  for (const candidate of candidates) {
+    const candidateInput = applyCommandMatchCandidate(input, candidate);
+
+    for (const rule of rules) {
+      if (!matchesRule(rule, candidateInput)) {
+        continue;
+      }
+
+      if (getJsonRule(rule).id === "generic/fallback") {
+        fallbackSelection ??= { rule, candidate };
+        continue;
+      }
+
+      specificMatches.push({ rule, candidate });
+    }
+  }
+
+  if (specificMatches.length > 0) {
+    return [...specificMatches].sort(compareSelections)[0];
+  }
+
+  return fallbackSelection;
+}
+
+function buildClassificationResult(
+  ruleLike: RuleLike,
+  candidate: CommandMatchCandidate,
+): ClassificationResult {
+  const rule = getJsonRule(ruleLike);
+  return {
+    family: rule.family,
+    confidence: rule.id === "generic/fallback" ? 0.2 : 0.9,
+    matchedReducer: rule.id,
+    matchedVia: candidate.source,
+    matchedCommand: candidate.command ?? candidate.argv.join(" "),
+  };
+}
+
+export function resolveRuleMatch<T extends RuleLike>(
+  input: ToolExecutionInput,
+  rules: T[],
+): ResolvedRuleMatch<T> | undefined {
+  const match = findBestRuleMatch(input, rules);
+  if (!match) {
+    return undefined;
+  }
+
+  const candidateInput = applyCommandMatchCandidate(input, match.candidate);
+  return {
+    rule: match.rule,
+    candidate: match.candidate,
+    candidateInput,
+    classification: buildClassificationResult(match.rule, match.candidate),
+  };
+}
+
 export function classifyExecution(
   input: ToolExecutionInput,
   rules: RuleLike[],
@@ -114,25 +226,13 @@ export function classifyExecution(
     }
   }
 
-  const matchedRules = rules.filter((rule) => matchesRule(rule, input));
-  if (matchedRules.length === 0) {
+  const resolved = resolveRuleMatch(input, rules);
+  if (!resolved) {
     return {
       family: "generic",
       confidence: 0.2,
     };
   }
 
-  const matchedRule = [...matchedRules].sort((left, right) => {
-    const scoreDiff = scoreRule(right) - scoreRule(left);
-    if (scoreDiff !== 0) {
-      return scoreDiff;
-    }
-    return getJsonRule(left).id.localeCompare(getJsonRule(right).id);
-  })[0]!;
-  const rule = getJsonRule(matchedRule);
-  return {
-    family: rule.family,
-    confidence: rule.id === "generic/fallback" ? 0.2 : 0.9,
-    matchedReducer: rule.id,
-  };
+  return resolved.classification;
 }
