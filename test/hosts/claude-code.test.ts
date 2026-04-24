@@ -8,6 +8,7 @@ import { doctorClaudeCodeHook, doctorInstalledHooks, installClaudeCodeHook, inst
 
 const tempDirs: string[] = [];
 const originalPath = process.env.PATH;
+const originalHome = process.env.HOME;
 
 afterEach(async () => {
   delete process.env.CLAUDE_CONFIG_DIR;
@@ -18,6 +19,11 @@ afterEach(async () => {
   delete process.env.CURSOR_HOME;
   delete process.env.PI_CODING_AGENT_DIR;
   process.env.PATH = originalPath;
+  if (originalHome === undefined) {
+    delete process.env.HOME;
+  } else {
+    process.env.HOME = originalHome;
+  }
   await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -423,6 +429,7 @@ describe("doctorInstalledHooks", () => {
     const codebuddyHome = join(home, "codebuddy");
 
     process.env.PATH = binDir;
+    process.env.HOME = home;
     process.env.CODEX_HOME = home;
     process.env.CLAUDE_HOME = home;
     process.env.CODEBUDDY_HOME = codebuddyHome;
@@ -452,6 +459,7 @@ describe("doctorInstalledHooks", () => {
     const codebuddyHome = join(home, "codebuddy");
 
     process.env.PATH = binDir;
+    process.env.HOME = home;
     process.env.CODEX_HOME = home;
     process.env.CLAUDE_HOME = home;
     process.env.CODEBUDDY_HOME = codebuddyHome;
@@ -499,6 +507,7 @@ describe("doctorInstalledHooks", () => {
     const expectedHookPrefix = `${localNodePath} ${resolve(localBinaryPath)}`;
 
     process.env.PATH = binDir;
+    process.env.HOME = home;
     process.env.CODEX_HOME = codexHome;
     process.env.CLAUDE_HOME = claudeHome;
     process.env.CODEBUDDY_HOME = codebuddyHome;

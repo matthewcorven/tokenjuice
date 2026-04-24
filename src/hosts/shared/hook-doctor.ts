@@ -3,12 +3,14 @@ import { doctorCodeBuddyHook } from "../codebuddy/index.js";
 import { doctorCodexHook } from "../codex/index.js";
 import { doctorCursorHook } from "../cursor/index.js";
 import { doctorPiExtension } from "../pi/index.js";
+import { doctorVscodeCopilotHook } from "../vscode-copilot/index.js";
 
 import type { ClaudeCodeDoctorReport, ClaudeCodeHookCommandOptions } from "../claude-code/index.js";
 import type { CodeBuddyDoctorReport, CodeBuddyHookCommandOptions } from "../codebuddy/index.js";
 import type { CodexDoctorReport, CodexHookCommandOptions } from "../codex/index.js";
 import type { CursorDoctorReport } from "../cursor/index.js";
 import type { PiDoctorReport } from "../pi/index.js";
+import type { VscodeCopilotDoctorReport } from "../vscode-copilot/index.js";
 
 type HookHealthStatus = "ok" | "warn" | "broken" | "disabled";
 
@@ -18,6 +20,7 @@ export type HookIntegrationDoctorReport = {
   codebuddy: CodeBuddyDoctorReport;
   cursor: CursorDoctorReport;
   pi: PiDoctorReport;
+  "vscode-copilot": VscodeCopilotDoctorReport;
 };
 
 export type HookDoctorReport = {
@@ -54,14 +57,18 @@ export async function doctorInstalledHooks(options: HookDoctorCommandOptions = {
   const codebuddy = await doctorCodeBuddyHook(undefined, hookCommandOptions);
   const cursor = await doctorCursorHook(undefined, hookCommandOptions);
   const pi = await doctorPiExtension();
+  const vscodeCopilot = await doctorVscodeCopilotHook(undefined, hookCommandOptions);
 
   return {
     status: mergeStatus(
       mergeStatus(
-        mergeStatus(mergeStatus(codex.status, claudeCode.status), codebuddy.status),
-        cursor.status,
+        mergeStatus(
+          mergeStatus(mergeStatus(codex.status, claudeCode.status), codebuddy.status),
+          cursor.status,
+        ),
+        pi.status,
       ),
-      pi.status,
+      vscodeCopilot.status,
     ),
     integrations: {
       codex,
@@ -69,6 +76,7 @@ export async function doctorInstalledHooks(options: HookDoctorCommandOptions = {
       codebuddy,
       cursor,
       pi,
+      "vscode-copilot": vscodeCopilot,
     },
   };
 }
