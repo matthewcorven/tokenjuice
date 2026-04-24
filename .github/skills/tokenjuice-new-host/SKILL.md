@@ -21,23 +21,8 @@ For rule JSON changes, do not use this skill; edit `src/rules/**` directly.
 - [docs/spec.md](../../../docs/spec.md) — reducer semantics and the supported-hosts table that must be updated.
 - [docs/cursor-integration.md](../../../docs/cursor-integration.md) — reference for pre-tool wrap flows.
 - [src/core/integrations/compact-bash-result.ts](../../../src/core/integrations/compact-bash-result.ts) — the one seam every post-tool host calls. Do not reimplement its logic inside an adapter.
-
-### Active host-specific briefs (read if implementing that host)
-
-If the host you are adding is `copilot-cli` or `vscode-copilot`, the
-research is already done — read the brief BEFORE designing, or you
-will redo hours of work. Briefs pin: host slug, install path and
-filename (per-host files in the shared `~/.copilot/hooks/` dir to
-avoid trampling), matcher value, captured payload fixtures, doctor
-scope, env-var handling, and which v1 cuts to respect.
-
-- [docs/_internal/README.md](../../../docs/_internal/README.md) — index.
-- [docs/_internal/copilot-cli-design-brief.md](../../../docs/_internal/copilot-cli-design-brief.md) — post-tool adapter, claude-code pattern.
-- [docs/_internal/vscode-copilot-chat-design-brief.md](../../../docs/_internal/vscode-copilot-chat-design-brief.md) — pre-tool wrap on `run_in_terminal`.
-- Fixtures: [test/hosts/fixtures/copilot-cli-posttool.json](../../../test/hosts/fixtures/copilot-cli-posttool.json), [test/hosts/fixtures/vscode-copilot-pretool.json](../../../test/hosts/fixtures/vscode-copilot-pretool.json), [test/hosts/fixtures/vscode-copilot-posttool.json](../../../test/hosts/fixtures/vscode-copilot-posttool.json) (reference only; not used in v1).
-
-When the two integrations ship, delete `docs/_internal/` and this
-subsection.
+- [src/hosts/shared/hooks-json-file.ts](../../../src/hosts/shared/hooks-json-file.ts) — shared serializer/parser/atomic-write/stray-scan helpers used by every claude-code-style hooks.json host (claude-code, copilot-cli, vscode-copilot). Reuse; do not reimplement.
+- [docs/copilot-cli-integration.md](../../../docs/copilot-cli-integration.md) and [docs/vscode-copilot-integration.md](../../../docs/vscode-copilot-integration.md) — reference per-host docs including the shared `~/.copilot/hooks/` dir hazard and VS Code `chat.useHooks` preconditions.
 
 ## Procedure
 

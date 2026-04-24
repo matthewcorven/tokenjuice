@@ -1,16 +1,21 @@
 import { constants as fsConstants } from "node:fs";
-import { access, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { access, rm } from "node:fs/promises";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
 
 import { compactBashResult } from "../../core/integrations/compact-bash-result.js";
 import { extractHookCommandPaths, parseShellWords, shellQuote } from "../shared/hook-command.js";
+import {
+  ensureHooksDir,
+  findStrayTokenjuiceHookFiles,
+  isRecord,
+  loadCopilotHooksConfigWithBackup,
+  readCopilotHooksConfig,
+  writeCopilotHooksConfigAtomic,
+} from "../shared/hooks-json-file.js";
+import type { CopilotHooksConfig } from "../shared/hooks-json-file.js";
 
-type CopilotCliHooksConfig = Record<string, unknown> & {
-  version?: number;
-  disableAllHooks?: boolean;
-  hooks: Record<string, unknown>;
-};
+type CopilotCliHooksConfig = CopilotHooksConfig;
 
 export type CopilotCliHookCommandOptions = {
   local?: boolean;
@@ -111,10 +116,6 @@ function getDefaultHooksPath(): string {
   return join(getCopilotCliHooksDir(), TOKENJUICE_COPILOT_CLI_FILENAME);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 async function isExecutableFile(path: string): Promise<boolean> {
   try {
     await access(path, fsConstants.X_OK);
@@ -201,58 +202,6 @@ function createTokenjuiceCopilotCliHook(command: string): Record<string, unknown
   };
 }
 
-function sanitizeCopilotCliHooksConfig(raw: unknown): CopilotCliHooksConfig {
-  if (!isRecord(raw)) {
-    return { version: 1, hooks: {} };
-  }
-
-  return {
-    ...raw,
-    version: typeof raw.version === "number" ? raw.version : 1,
-    hooks: isRecord(raw.hooks) ? { ...raw.hooks } : {},
-  };
-}
-
-async function loadCopilotCliHooksConfig(
-  hooksPath: string,
-): Promise<{ config: CopilotCliHooksConfig; backupPath?: string }> {
-  try {
-    const rawText = await readFile(hooksPath, "utf8");
-    const parsed = JSON.parse(rawText) as unknown;
-    const config = sanitizeCopilotCliHooksConfig(parsed);
-    const backupPath = `${hooksPath}.bak`;
-    await writeFile(backupPath, rawText, "utf8");
-    return { config, backupPath };
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { config: { version: 1, hooks: {} } };
-    }
-    throw new Error(
-      `failed to load copilot-cli hooks from ${hooksPath}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
-
-async function readCopilotCliHooksConfig(
-  hooksPath: string,
-): Promise<{ config: CopilotCliHooksConfig; exists: boolean }> {
-  try {
-    const rawText = await readFile(hooksPath, "utf8");
-    const parsed = JSON.parse(rawText) as unknown;
-    return {
-      config: sanitizeCopilotCliHooksConfig(parsed),
-      exists: true,
-    };
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { config: { version: 1, hooks: {} }, exists: false };
-    }
-    throw new Error(
-      `failed to read copilot-cli hooks from ${hooksPath}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
-
 function findTokenjuiceCopilotCliHookCommand(config: CopilotCliHooksConfig): string | undefined {
   const postToolUse = config.hooks.postToolUse;
   if (!Array.isArray(postToolUse)) {
@@ -274,7 +223,7 @@ export async function installCopilotCliHook(
 ): Promise<InstallCopilotCliHookResult> {
   const hooksDir = dirname(hooksPath);
 
-  const { config, backupPath } = await loadCopilotCliHooksConfig(hooksPath);
+  const { config, backupPath } = await loadCopilotHooksConfigWithBackup(hooksPath, "copilot-cli");
   const command = await buildCopilotCliHookCommand(options);
   const postToolUse = Array.isArray(config.hooks.postToolUse) ? config.hooks.postToolUse : [];
   const retained = postToolUse.filter((hook) => !isTokenjuiceCopilotCliHook(hook));
@@ -284,10 +233,8 @@ export async function installCopilotCliHook(
     config.version = 1;
   }
 
-  await mkdir(hooksDir, { recursive: true });
-  const tempPath = `${hooksPath}.tmp`;
-  await writeFile(tempPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
-  await rename(tempPath, hooksPath);
+  await ensureHooksDir(hooksDir);
+  await writeCopilotHooksConfigAtomic(hooksPath, config);
 
   return {
     hooksPath,
@@ -299,7 +246,7 @@ export async function installCopilotCliHook(
 export async function uninstallCopilotCliHook(
   hooksPath = getDefaultHooksPath(),
 ): Promise<UninstallCopilotCliHookResult> {
-  const { config, exists } = await readCopilotCliHooksConfig(hooksPath);
+  const { config, exists } = await readCopilotHooksConfig(hooksPath, "copilot-cli");
   if (!exists) {
     return { hooksPath, removed: 0, deletedFile: false };
   }
@@ -327,45 +274,20 @@ export async function uninstallCopilotCliHook(
     return { hooksPath, removed, deletedFile: true };
   }
 
-  const tempPath = `${hooksPath}.tmp`;
-  await writeFile(tempPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
-  await rename(tempPath, hooksPath);
+  await writeCopilotHooksConfigAtomic(hooksPath, config);
 
   return { hooksPath, removed, deletedFile: false };
 }
 
-async function findStrayTokenjuiceHookFiles(
+async function findStrayCopilotCliHookFiles(
   hooksDir: string,
   canonicalPath: string,
 ): Promise<string[]> {
-  let entries: string[];
-  try {
-    entries = await readdir(hooksDir);
-  } catch {
-    return [];
-  }
-
-  const stray: string[] = [];
-  for (const entry of entries) {
-    if (!entry.endsWith(".json")) {
-      continue;
-    }
-    const candidate = join(hooksDir, entry);
-    if (candidate === canonicalPath) {
-      continue;
-    }
-    try {
-      const rawText = await readFile(candidate, "utf8");
-      const parsed = JSON.parse(rawText) as unknown;
-      const config = sanitizeCopilotCliHooksConfig(parsed);
-      if (findTokenjuiceCopilotCliHookCommand(config)) {
-        stray.push(candidate);
-      }
-    } catch {
-      // ignore unreadable/invalid files
-    }
-  }
-  return stray;
+  return findStrayTokenjuiceHookFiles(
+    hooksDir,
+    canonicalPath,
+    (command) => command.includes(TOKENJUICE_COPILOT_CLI_SUBCOMMAND),
+  );
 }
 
 export async function doctorCopilotCliHook(
@@ -375,7 +297,7 @@ export async function doctorCopilotCliHook(
   const expectedCommand = await buildCopilotCliHookCommand(options);
   const fixCommand = getCopilotCliFixCommand(options.local);
   const advisories = [TOKENJUICE_COPILOT_CLI_INSTRUCTIONS_ADVISORY];
-  const { config, exists } = await readCopilotCliHooksConfig(hooksPath);
+  const { config, exists } = await readCopilotHooksConfig(hooksPath, "copilot-cli");
 
   if (!exists) {
     return {
@@ -419,7 +341,7 @@ export async function doctorCopilotCliHook(
     };
   }
 
-  const strayFiles = await findStrayTokenjuiceHookFiles(dirname(hooksPath), hooksPath);
+  const strayFiles = await findStrayCopilotCliHookFiles(dirname(hooksPath), hooksPath);
   const checkedPaths = extractHookCommandPaths(detectedCommand);
   const missingPaths: string[] = [];
   for (const path of checkedPaths) {

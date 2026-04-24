@@ -1,15 +1,21 @@
 import { constants as fsConstants } from "node:fs";
-import { access, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rename, rm } from "node:fs/promises";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
 
 import { extractHookCommandPaths, parseShellWords, shellQuote } from "../shared/hook-command.js";
+import {
+  ensureHooksDir,
+  findStrayTokenjuiceHookFiles,
+  isRecord,
+  loadCopilotHooksConfigWithBackup,
+  readCopilotHooksConfig,
+  sanitizeCopilotHooksConfig,
+  writeCopilotHooksConfigAtomic,
+} from "../shared/hooks-json-file.js";
+import type { CopilotHooksConfig } from "../shared/hooks-json-file.js";
 
-type VscodeCopilotHooksConfig = Record<string, unknown> & {
-  version?: number;
-  disableAllHooks?: boolean;
-  hooks: Record<string, unknown>;
-};
+type VscodeCopilotHooksConfig = CopilotHooksConfig;
 
 export type VscodeCopilotHookCommandOptions = {
   local?: boolean;
@@ -96,9 +102,6 @@ function getDefaultHooksPath(): string {
   return join(getVscodeCopilotHooksDir(), TOKENJUICE_VSCODE_COPILOT_FILENAME);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 async function isExecutableFile(path: string): Promise<boolean> {
   try {
@@ -188,59 +191,6 @@ function createTokenjuiceVscodeCopilotHook(command: string): Record<string, unkn
   };
 }
 
-function sanitizeVscodeCopilotHooksConfig(raw: unknown): VscodeCopilotHooksConfig {
-  if (!isRecord(raw)) {
-    return { version: 1, hooks: {} };
-  }
-
-  return {
-    ...raw,
-    version: typeof raw.version === "number" ? raw.version : 1,
-    hooks: isRecord(raw.hooks) ? { ...raw.hooks } : {},
-  };
-}
-
-async function loadVscodeCopilotHooksConfig(
-  hooksPath: string,
-): Promise<{ config: VscodeCopilotHooksConfig; backupPath?: string }> {
-  try {
-    const rawText = await readFile(hooksPath, "utf8");
-    const parsed = JSON.parse(rawText) as unknown;
-    const config = sanitizeVscodeCopilotHooksConfig(parsed);
-    const backupPath = `${hooksPath}.bak`;
-    await writeFile(backupPath, rawText, "utf8");
-    return { config, backupPath };
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { config: { version: 1, hooks: {} } };
-    }
-    throw new Error(
-      `failed to load vscode-copilot hooks from ${hooksPath}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
-
-async function readVscodeCopilotHooksConfig(
-  hooksPath: string,
-): Promise<{ config: VscodeCopilotHooksConfig; exists: boolean; rawText?: string }> {
-  try {
-    const rawText = await readFile(hooksPath, "utf8");
-    const parsed = JSON.parse(rawText) as unknown;
-    return {
-      config: sanitizeVscodeCopilotHooksConfig(parsed),
-      exists: true,
-      rawText,
-    };
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { config: { version: 1, hooks: {} }, exists: false };
-    }
-    throw new Error(
-      `failed to read vscode-copilot hooks from ${hooksPath}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
-
 function findTokenjuiceVscodeCopilotHookCommand(config: VscodeCopilotHooksConfig): string | undefined {
   const preToolUse = config.hooks.preToolUse;
   if (!Array.isArray(preToolUse)) {
@@ -271,7 +221,7 @@ async function migrateLegacyInstall(hooksDir: string, hooksPath: string): Promis
   try {
     const rawText = await readFile(legacyPath, "utf8");
     const parsed = JSON.parse(rawText) as unknown;
-    const config = sanitizeVscodeCopilotHooksConfig(parsed);
+    const config = sanitizeCopilotHooksConfig(parsed);
     if (!findTokenjuiceVscodeCopilotHookCommand(config)) {
       return undefined;
     }
@@ -291,7 +241,7 @@ export async function installVscodeCopilotHook(
   const hooksDir = dirname(hooksPath);
   const migratedFromPath = await migrateLegacyInstall(hooksDir, hooksPath);
 
-  const { config, backupPath } = await loadVscodeCopilotHooksConfig(hooksPath);
+  const { config, backupPath } = await loadCopilotHooksConfigWithBackup(hooksPath, "vscode-copilot");
   const command = await buildVscodeCopilotHookCommand(options);
   const preToolUse = Array.isArray(config.hooks.preToolUse) ? config.hooks.preToolUse : [];
   const retained = preToolUse.filter((hook) => !isTokenjuiceVscodeCopilotHook(hook));
@@ -301,10 +251,8 @@ export async function installVscodeCopilotHook(
     config.version = 1;
   }
 
-  await mkdir(hooksDir, { recursive: true });
-  const tempPath = `${hooksPath}.tmp`;
-  await writeFile(tempPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
-  await rename(tempPath, hooksPath);
+  await ensureHooksDir(hooksDir);
+  await writeCopilotHooksConfigAtomic(hooksPath, config);
 
   return {
     hooksPath,
@@ -317,7 +265,7 @@ export async function installVscodeCopilotHook(
 export async function uninstallVscodeCopilotHook(
   hooksPath = getDefaultHooksPath(),
 ): Promise<UninstallVscodeCopilotHookResult> {
-  const { config, exists } = await readVscodeCopilotHooksConfig(hooksPath);
+  const { config, exists } = await readCopilotHooksConfig(hooksPath, "vscode-copilot");
   if (!exists) {
     return { hooksPath, removed: 0, deletedFile: false };
   }
@@ -347,45 +295,20 @@ export async function uninstallVscodeCopilotHook(
     return { hooksPath, removed, deletedFile: true };
   }
 
-  const tempPath = `${hooksPath}.tmp`;
-  await writeFile(tempPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
-  await rename(tempPath, hooksPath);
+  await writeCopilotHooksConfigAtomic(hooksPath, config);
 
   return { hooksPath, removed, deletedFile: false };
 }
 
-async function findStrayTokenjuiceHookFiles(
+async function findStrayVscodeCopilotHookFiles(
   hooksDir: string,
   canonicalPath: string,
 ): Promise<string[]> {
-  let entries: string[];
-  try {
-    entries = await readdir(hooksDir);
-  } catch {
-    return [];
-  }
-
-  const stray: string[] = [];
-  for (const entry of entries) {
-    if (!entry.endsWith(".json")) {
-      continue;
-    }
-    const candidate = join(hooksDir, entry);
-    if (candidate === canonicalPath) {
-      continue;
-    }
-    try {
-      const rawText = await readFile(candidate, "utf8");
-      const parsed = JSON.parse(rawText) as unknown;
-      const config = sanitizeVscodeCopilotHooksConfig(parsed);
-      if (findTokenjuiceVscodeCopilotHookCommand(config)) {
-        stray.push(candidate);
-      }
-    } catch {
-      // ignore unreadable/invalid files
-    }
-  }
-  return stray;
+  return findStrayTokenjuiceHookFiles(
+    hooksDir,
+    canonicalPath,
+    (command) => command.includes(TOKENJUICE_VSCODE_COPILOT_SUBCOMMAND),
+  );
 }
 
 export async function doctorVscodeCopilotHook(
@@ -398,7 +321,7 @@ export async function doctorVscodeCopilotHook(
     TOKENJUICE_VSCODE_COPILOT_ADVISORY,
     TOKENJUICE_VSCODE_COPILOT_INSTRUCTIONS_ADVISORY,
   ];
-  const { config, exists } = await readVscodeCopilotHooksConfig(hooksPath);
+  const { config, exists } = await readCopilotHooksConfig(hooksPath, "vscode-copilot");
 
   if (!exists) {
     return {
@@ -442,7 +365,7 @@ export async function doctorVscodeCopilotHook(
     };
   }
 
-  const strayFiles = await findStrayTokenjuiceHookFiles(dirname(hooksPath), hooksPath);
+  const strayFiles = await findStrayVscodeCopilotHookFiles(dirname(hooksPath), hooksPath);
   const checkedPaths = extractHookCommandPaths(detectedCommand);
   const missingPaths: string[] = [];
   for (const path of checkedPaths) {

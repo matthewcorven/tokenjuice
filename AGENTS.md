@@ -53,7 +53,8 @@ In-repo docs (link, don't duplicate):
 - [docs/integration-playbook.md](docs/integration-playbook.md) — per-host integration + regression checklist
 - [docs/cursor-integration.md](docs/cursor-integration.md) — pre-tool wrap flow specifics
 - [docs/distribution.md](docs/distribution.md) — npm / Homebrew / nfpm packaging
-- [docs/_internal/README.md](docs/_internal/README.md) — **temporary** design briefs for the in-progress Copilot CLI + VS Code Copilot Chat integrations. If you are implementing `copilot-cli` or `vscode-copilot`, read the two briefs linked from there before starting; they pin host slugs, install paths, matchers, payload fixtures, and a shared-file trampling hazard. Delete the folder once both integrations ship.
+- [docs/copilot-cli-integration.md](docs/copilot-cli-integration.md) — Copilot CLI post-tool hook specifics, including the shared `~/.copilot/hooks/` dir hazard.
+- [docs/vscode-copilot-integration.md](docs/vscode-copilot-integration.md) — VS Code Copilot Chat pre-tool wrap specifics, `chat.useHooks`, and workspace trust.
 
 ## Release Process
 
