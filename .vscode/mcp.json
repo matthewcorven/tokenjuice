@@ -1,0 +1,9 @@
+{
+	"servers": {
+		"deep-wiki": {
+			"url": "https://mcp.deepwiki.com/mcp",
+			"type": "http"
+		}
+	},
+	"inputs": []
+}
