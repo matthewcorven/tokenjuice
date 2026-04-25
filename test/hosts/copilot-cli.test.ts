@@ -563,6 +563,22 @@ describe("runCopilotCliPostToolUseHook", () => {
     expect(output.trim()).toBe("{}");
   });
 
+  it("honors explicit raw bypass after a leading cd prefix", async () => {
+    const payload = JSON.stringify({
+      tool_name: "bash",
+      tool_input: { command: "cd /repo && tokenjuice wrap --raw -- cat large.log" },
+      tool_result: {
+        result_type: "success",
+        text_result_for_llm: Array.from({ length: 200 }, (_, i) => `line ${i}`).join("\n"),
+      },
+    });
+
+    const { code, output } = await captureStdout(() => runCopilotCliPostToolUseHook(payload));
+
+    expect(code).toBe(0);
+    expect(output.trim()).toBe("{}");
+  });
+
   it("emits {} when tool_result is absent", async () => {
     const payload = JSON.stringify({
       tool_name: "bash",

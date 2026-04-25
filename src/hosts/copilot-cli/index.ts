@@ -3,6 +3,7 @@ import { access, rm } from "node:fs/promises";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
 
+import { stripLeadingCdPrefix } from "../../core/command.js";
 import { compactBashResult } from "../../core/integrations/compact-bash-result.js";
 import { extractHookCommandPaths, parseShellWords, shellQuote } from "../shared/hook-command.js";
 import {
@@ -381,7 +382,7 @@ export async function doctorCopilotCliHook(
 }
 
 function commandRequestsTokenjuiceRawBypass(command: string): boolean {
-  const argv = parseShellWords(command);
+  const argv = parseShellWords(stripLeadingCdPrefix(command));
   if (argv.length < 2) {
     return false;
   }

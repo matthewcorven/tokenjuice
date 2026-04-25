@@ -508,10 +508,34 @@ describe("runVscodeCopilotPreToolUseHook", () => {
     expect(output.trim()).toBe("{}");
   });
 
+  it("skips already wrapped commands after a leading cd prefix", async () => {
+    const payload = JSON.stringify({
+      tool_name: "run_in_terminal",
+      tool_input: { command: "cd /repo && tokenjuice wrap -- git status" },
+    });
+
+    const { code, output } = await captureStdout(() => runVscodeCopilotPreToolUseHook(payload));
+
+    expect(code).toBe(0);
+    expect(output.trim()).toBe("{}");
+  });
+
   it("honors explicit raw bypass inside the command", async () => {
     const payload = JSON.stringify({
       tool_name: "run_in_terminal",
       tool_input: { command: "tokenjuice wrap --raw -- git status" },
+    });
+
+    const { code, output } = await captureStdout(() => runVscodeCopilotPreToolUseHook(payload));
+
+    expect(code).toBe(0);
+    expect(output.trim()).toBe("{}");
+  });
+
+  it("honors explicit raw bypass after a leading cd prefix", async () => {
+    const payload = JSON.stringify({
+      tool_name: "run_in_terminal",
+      tool_input: { command: "cd /repo && tokenjuice wrap --raw -- git status" },
     });
 
     const { code, output } = await captureStdout(() => runVscodeCopilotPreToolUseHook(payload));
